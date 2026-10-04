@@ -50,7 +50,7 @@
 
           <div class="tcm-improvements">
   <div><span>Improvements</span><strong>{{progression.chosen}} / {{progression.target}}</strong></div>
-  <button type="button" data-action="trainCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}}>
+  <button type="button" data-action="trainCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}} {{#if progression.target}}{{else}}disabled{{/if}}>
     <i class="fa-solid fa-graduation-cap"></i> Choose Improvement
   </button>
 </div>
