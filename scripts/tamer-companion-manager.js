@@ -198,7 +198,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
    * definition but bypass the system's player-choice workflow.
    */
   static async addImprovementItem(actor, data, sourceUuid) {
-    const AdvancementManager = dnd5e?.applications?.advancement?.AdvancementManager;
+    const AdvancementManager = globalThis.dnd5e?.applications?.advancement?.AdvancementManager;
     const hasAdvancement = Object.keys(data.system?.advancement ?? {}).length > 0;
 
     if (!hasAdvancement || !AdvancementManager) {
