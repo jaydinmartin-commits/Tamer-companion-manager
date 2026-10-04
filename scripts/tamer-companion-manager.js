@@ -183,7 +183,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             const eligibility = this.getImprovementEligibility(item, actor, level, selectedUuids, optionsByName);
             const locked = !selected.has(uuid) && !eligibility.eligible;
             const prereqData = encodeURIComponent(JSON.stringify(prereq));
-            const tooltipHtml = encodeURIComponent(this.getImprovementDescriptionHTML(item));
+            const tooltipHtml = this.getImprovementDescriptionHTML(item);
 
             return `
               <label class="tcm-advancement-option${locked ? " is-locked" : ""}"
