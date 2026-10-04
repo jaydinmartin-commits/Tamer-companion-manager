@@ -197,7 +197,8 @@ class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(Appli
   }
 }
 
-Hooks.once("init", () => {\n  game.settings.register(MODULE_ID, "improvementTrees", { scope: "world", config: false, type: Array, default: [] });\n  game.settings.registerMenu(MODULE_ID, "openImprovementRegistry", { name: "Bespoke Companion Improvements", label: "Register Improvements", hint: "Register additional improvement trees for bespoke companions.", icon: "fa-solid fa-tree", type: TamerCompanionImprovementRegistry, restricted: true });
+Hooks.once("init", () => {
+  game.settings.register(MODULE_ID, "improvementTrees", { scope: "world", config: false, type: Array, default: [] });\n  game.settings.registerMenu(MODULE_ID, "openImprovementRegistry", { name: "Bespoke Companion Improvements", label: "Register Improvements", hint: "Register additional improvement trees for bespoke companions.", icon: "fa-solid fa-tree", type: TamerCompanionImprovementRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openManager", { name: "Tamer Companion Manager", label: "Open Companion Manager", hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.", icon: "fa-solid fa-paw", type: TamerCompanionManager, restricted: false });
   game.tamerCompanionManager = { open: actor => TamerCompanionManager.open(actor), isTamer: actor => TamerCompanionManager.isTamer(actor), getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor), getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level) };
   const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
@@ -207,4 +208,4 @@ Hooks.once("init", () => {\n  game.settings.register(MODULE_ID, "improvementTree
 
 globalThis.TamerCompanionManager = TamerCompanionManager;
 
- globalThis.TamerCompanionImprovementRegistry = TamerCompanionImprovementRegistry;
+globalThis.TamerCompanionImprovementRegistry = TamerCompanionImprovementRegistry;
