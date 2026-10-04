@@ -829,10 +829,18 @@ class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
     this.source = options.source ?? "all";
   }
 
+  static isActorPack(pack) {
+    return !!pack && (
+      pack.documentName === "Actor" ||
+      pack.documentClass?.documentName === "Actor" ||
+      pack.metadata?.type === "Actor"
+    );
+  }
+
   static getConfiguredPacks() {
     const configured = foundry.utils.deepClone(game.settings.get(MODULE_ID, "companionSourcePacks") ?? []);
     return configured.map(collection => game.packs.get(String(collection)))
-      .filter(pack => pack?.documentName === "Actor")
+      .filter(pack => TamerCompanionBrowser.isActorPack(pack))
       .filter(pack => game.user.isGM || pack.visible)
       .sort((a, b) => a.title.localeCompare(b.title));
   }
@@ -905,7 +913,7 @@ class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
     const packCollection = target.dataset.pack;
     const documentId = target.dataset.id;
     const pack = game.packs.get(packCollection);
-    if (!pack || pack.documentName !== "Actor") return ui.notifications.error("That companion source is no longer available.");
+    if (!TamerCompanionBrowser.isActorPack(pack)) return ui.notifications.error("That companion source is no longer available.");
     if (!game.user.isGM && !pack.visible) return ui.notifications.warn("You do not have permission to access that compendium.");
 
     try {
@@ -933,7 +941,7 @@ class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(Applicatio
   async _prepareContext() {
     const selected = new Set(foundry.utils.deepClone(game.settings.get(MODULE_ID, "companionSourcePacks") ?? []).map(String));
     const packs = [...game.packs.values()]
-      .filter(pack => pack.documentName === "Actor")
+      .filter(pack => TamerCompanionBrowser.isActorPack(pack))
       .sort((a,b) => a.title.localeCompare(b.title))
       .map(pack => ({
         collection: pack.collection,
@@ -946,10 +954,25 @@ class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(Applicatio
   }
 
   static async _onSave(event, target) {
-    const form = target.closest("form");
-    const selected = [...(form?.querySelectorAll("input[name='companionSourcePack']:checked") ?? [])].map(input => input.value);
+    const form = target?.closest?.("form") ?? this.element?.querySelector("form");
+    if (!form) return ui.notifications.error("Could not read the Companion Sources form.");
+
+    const selected = [...form.querySelectorAll("input[name='companionSourcePack']:checked")]
+      .map(input => String(input.value))
+      .filter(collection => game.packs.has(collection));
+
     await game.settings.set(MODULE_ID, "companionSourcePacks", selected);
-    ui.notifications.info(`Companion sources updated. ${selected.length} Actor compendium${selected.length === 1 ? "" : "s"} enabled.`);
+
+    const stored = foundry.utils.deepClone(
+      game.settings.get(MODULE_ID, "companionSourcePacks") ?? []
+    ).map(String);
+
+    if (stored.length !== selected.length || selected.some(collection => !stored.includes(collection))) {
+      console.error("[Tamer Companion Manager] Companion source setting did not persist.", { selected, stored });
+      return ui.notifications.error("The companion sources could not be saved. See the browser console for details.");
+    }
+
+    ui.notifications.info(`Companion sources updated. ${stored.length} Actor compendium${stored.length === 1 ? "" : "s"} enabled.`);
     await this.close();
   }
 
