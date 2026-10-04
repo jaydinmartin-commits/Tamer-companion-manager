@@ -194,7 +194,7 @@ class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(Appli
         this.editing.sources??=[];if(!this.editing.sources.some(x=>(x.uuid??x)===doc.uuid))this.editing.sources.push({uuid:doc.uuid,name:doc.name,type:doc.documentName});
       }
       await this.render({force:true});
-    }});
+    }}});
     drop.bind(this.element);
   }
 }
