@@ -123,7 +123,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           structuredNames.join(", ")
         ].filter(Boolean).join(", "),
         level: structuredLevel > 0 ? structuredLevel : 0,
-        names: structuredNames
+        names: structuredNames,
+        freeOnTaming: structuredNames.some(name => /^(?:become(?: a)? tamer(?:['’]s)? companion|become(?: a)? tamers companion)$/i.test(String(name).trim()))
       };
     }
 
@@ -153,13 +154,14 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       raw = match[1].trim();
     }
 
-    if (!raw) return { text: "", level: 0, names: [] };
+    if (!raw) return { text: "", level: 0, names: [], freeOnTaming: false };
 
     const levelMatch =
       raw.match(/(\d+)\s*(?:st|nd|rd|th)?\s*-?\s*level\s+tamer/i) ??
       raw.match(/tamer\s+level\s+(\d+)/i);
 
     const level = levelMatch ? Number(levelMatch[1]) : 0;
+    const freeOnTaming = raw.split(/,|\band\b/i).some(part => /^(?:become(?: a)? tamer(?:['’]s)? companion|become(?: a)? tamers companion)$/i.test(String(part).trim()));
 
     const names = raw
       .replace(/\d+\s*(?:st|nd|rd|th)?\s*-?\s*level\s+tamer/ig, "")
@@ -169,10 +171,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       .filter(x =>
         x &&
         !/^—$/.test(x) &&
-        !/^become(?: a)? tamer(?:’s|')? companion$/i.test(x)
+        !/^become(?: a)? tamer(?:['’]s|')? companion$/i.test(x)
       );
 
-    return { text: raw, level, names };
+    return { text: raw, level, names, freeOnTaming };
   }
 
   static getImprovementEligibility(item, actor, level, selectedSourceUuids, optionsByName) {
