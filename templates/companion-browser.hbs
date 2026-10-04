@@ -1,0 +1,44 @@
+<section class="tcm-companion-browser-root">
+  <div class="tcm-companion-browser-toolbar">
+    <div class="tcm-companion-browser-search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" name="tcm-companion-search" placeholder="Search creatures..." autocomplete="off">
+    </div>
+    <select name="tcm-companion-source" aria-label="Companion source">
+      <option value="all" {{#if (eq selectedSource "all")}}selected{{/if}}>All Configured Sources</option>
+      {{#each packs}}
+        <option value="{{collection}}" {{#if (eq ../selectedSource collection)}}selected{{/if}}>{{title}}</option>
+      {{/each}}
+    </select>
+  </div>
+
+  {{#if packs.length}}
+    <div class="tcm-companion-browser-meta">
+      <span class="tcm-companion-browser-count">{{entries.length}} companions</span>
+      <span>Choose a creature to import it as a World Actor and bond it to this Tamer.</span>
+    </div>
+    <div class="tcm-companion-browser-list">
+      {{#each entries}}
+        <button type="button" class="tcm-companion-browser-entry" data-action="selectCompanion" data-pack="{{source}}" data-id="{{id}}" data-search="{{name}} {{sourceTitle}}">
+          <img src="{{img}}" alt="">
+          <span class="tcm-companion-browser-entry-text">
+            <strong>{{name}}</strong>
+            <small>{{sourceTitle}}{{#if type}} · {{type}}{{/if}}</small>
+          </span>
+          <i class="fa-solid fa-plus"></i>
+        </button>
+      {{/each}}
+    </div>
+    <div class="tcm-companion-browser-empty" hidden>
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <strong>No matching companions</strong>
+      <span>Try a different search.</span>
+    </div>
+  {{else}}
+    <div class="tcm-companion-browser-empty is-empty">
+      <i class="fa-solid fa-database"></i>
+      <strong>No companion sources configured</strong>
+      <span>Ask the GM to enable Actor compendiums in Configure Companion Sources.</span>
+    </div>
+  {{/if}}
+</section>
