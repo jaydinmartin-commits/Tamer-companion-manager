@@ -15,16 +15,20 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _prepareContext() {
     // The Settings submenu constructs this Application without a Tamer.
-    // Render a harmless placeholder first; _onFirstRender will prompt the
-    // user to choose which Tamer's Pocket Family to manage.
+    // Choose the Tamer before the first render so the manager never opens
+    // against a placeholder and never needs a second window/render cycle.
     if (!this.tamer) {
-      return {
-        tamer: { name: "Select a Tamer", img: "icons/svg/mystery-man.svg", level: 0 },
-        pocketFamily: { slots: 0, occupied: 0, empty: [] },
-        limits: { size: "Small", cr: 0.5 },
-        soulBond: { current: 0, max: 0 },
-        companions: []
-      };
+      this.tamer = await TamerCompanionManager.chooseTamer();
+      if (!this.tamer) {
+        this._tcmCancelInitialOpen = true;
+        return {
+          tamer: { name: "Select a Tamer", img: "icons/svg/mystery-man.svg", level: 0 },
+          pocketFamily: { slots: 0, occupied: 0, empty: [] },
+          limits: { size: "Small", cr: 0.5 },
+          soulBond: { current: 0, max: 0 },
+          companions: []
+        };
+      }
     }
 
     const level = TamerCompanionManager.getTamerLevel(this.tamer), slots = TamerCompanionManager.getPocketFamilySlots(level), records = TamerCompanionManager.records(this.tamer);
@@ -460,16 +464,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onFirstRender(context, options) {
     await super._onFirstRender(context, options);
-    if (this.tamer) return;
-
-    const tamer = await TamerCompanionManager.chooseTamer();
-    if (!tamer) {
-      await this.close();
-      return;
-    }
-
-    this.tamer = tamer;
-    await this.render({ force: true });
+    if (this._tcmCancelInitialOpen) await this.close();
   }
 
   async _onRender(context, options) { await super._onRender(context, options); if (this.element) this._tcmDragDrop.bind(this.element); }
