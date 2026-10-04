@@ -165,11 +165,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       canvas.tokens.activate({ tool: "select" });
     }
 
-    // Foundry's native placement workflow requires the TokenLayer to be the
-    // active interactive layer. Do not install any secondary click handlers:
-    // placeTokens owns the pointer workflow and resolves its promise on click.
-    canvas.tokens.eventMode = "static";
-
+    // Foundry's native placement workflow owns pointer movement and click
+    // confirmation. Do not override eventMode or install secondary handlers.
     const grid = canvas.grid;
     const tamerCenter = tamerToken.center;
     const range = 30;
