@@ -159,7 +159,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const esc = value => foundry.utils.escapeHTML(String(value ?? ""));
     const selectedUuids = new Set(selected.keys());
     const optionsByName = new Map();
-    for (const { item } of options) optionsByName.set(String(item.name).trim().toLowerCase(), item.uuid);
+    for (const { item } of options) optionsByName.set(this.normalizeImprovementName(item.name), item.uuid);
 
     // Level requirements come from the improvement Item's prerequisite text,
     // while the actual Tamer level is read from the Tamer's Tamer class Item.
@@ -270,14 +270,23 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const desired = new Set(result);
     const availableByUuid = new Map(options.map(({ item }) => [item.uuid, item]));
     const availableByName = new Map(options.map(({ item }) => [this.normalizeImprovementName(item.name), item.uuid]));
+
+    // Validate the complete final selection, not just what the actor already owns.
+    // A prerequisite is satisfied when that exact improvement is already owned or
+    // is part of the final selection being saved. This allows selecting Growth I
+    // and Growth II together, while preventing Growth II from being saved alone.
+    const missingPrerequisites = [];
     for (const sourceUuid of desired) {
       const item = availableByUuid.get(sourceUuid);
       if (!item) continue;
       const eligibility = this.getImprovementEligibility(item, actor, level, desired, availableByName);
       if (!eligibility.eligible) {
-        ui.notifications.warn(`${item.name} cannot be selected. Missing prerequisite: ${eligibility.missing.join(", ")}.`);
-        return false;
+        missingPrerequisites.push(`${item.name}: ${eligibility.missing.join(", ")}`);
       }
+    }
+    if (missingPrerequisites.length) {
+      ui.notifications.warn(`Cannot save improvements because prerequisites are missing: ${missingPrerequisites.join("; ")}.`);
+      return false;
     }
     const current = new Map((record?.improvements ?? []).map(entry => [String(entry.sourceUuid ?? ""), entry]));
     const records = this.records(tamer);
