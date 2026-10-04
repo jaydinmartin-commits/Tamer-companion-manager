@@ -135,6 +135,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const esc = value => foundry.utils.escapeHTML(String(value ?? ""));
     const selectedUuids = new Set(selected.keys());
+    const optionsByName = new Map();
+    for (const { item } of options) optionsByName.set(String(item.name).trim().toLowerCase(), item.uuid);
+
     const groupHtml = [...groups.entries()].map(([treeName, entries]) => `
       <section class="tcm-advancement-group">
         <h3>${esc(treeName)}</h3>
@@ -142,17 +145,19 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           ${entries.sort((a,b) => a.item.name.localeCompare(b.item.name)).map(({item}) => {
             const uuid = item.uuid;
             const description = this.getImprovementDescription(item);
-            const prerequisites = this.getImprovementPrerequisites(item, actor, level, selectedUuids);
-            const locked = !selected.has(uuid) && prerequisites.length > 0;
+            const prereq = this.parseImprovementPrerequisites(item);
+            const eligibility = this.getImprovementEligibility(item, actor, level, selectedUuids, optionsByName);
+            const locked = !selected.has(uuid) && !eligibility.eligible;
+            const prereqData = encodeURIComponent(JSON.stringify(prereq));
             return `
               <label class="tcm-advancement-option${locked ? " is-locked" : ""}" title="${esc(description || item.name)}">
-                <input type="checkbox" name="improvement" value="${esc(uuid)}"${selected.has(uuid) ? " checked" : ""}${locked ? " disabled" : ""}>
+                <input type="checkbox" name="improvement" value="${esc(uuid)}"${selected.has(uuid) ? " checked" : ""}${locked ? " disabled" : ""} data-prerequisites="${esc(prereqData)}">
                 <span class="tcm-advancement-check"></span>
                 <img class="tcm-advancement-icon" src="${esc(item.img || "icons/svg/item-bag.svg")}" alt="">
                 <span class="tcm-advancement-text">
                   <strong>${esc(item.name)}</strong>
                   ${description ? `<small>${esc(description)}</small>` : ""}
-                  ${prerequisites.length ? `<em class="tcm-improvement-prerequisite">${esc(prerequisites.join("; "))}</em>` : ""}
+                  ${eligibility.missing.length ? `<em class="tcm-improvement-prerequisite">Requires: ${esc(eligibility.missing.join(", "))}</em>` : ""}
                 </span>
               </label>`;
           }).join("")}
@@ -191,9 +196,26 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         const boxes = [...root.querySelectorAll('input[name="improvement"]')];
         const count = root.querySelector(".tcm-selected-count");
         const updateCount = () => {
-          const n = boxes.filter(input => input.checked).length;
+          const selectedNow = new Set(boxes.filter(input => input.checked).map(input => input.value));
+          const n = selectedNow.size;
           if (count) count.textContent = n;
-          for (const input of boxes) input.disabled = input.dataset.locked === "true" || (!input.checked && n >= progression.target);
+          for (const input of boxes) {
+            let prereq = { level: 0, names: [] };
+            try { prereq = JSON.parse(decodeURIComponent(input.dataset.prerequisites || "")); } catch {}
+            const missing = [];
+            if (prereq.level && level < prereq.level) missing.push(`Tamer level ${prereq.level}`);
+            for (const name of prereq.names ?? []) {
+              const uuid = optionsByName.get(String(name).trim().toLowerCase());
+              if (uuid && !selectedNow.has(uuid)) missing.push(name);
+            }
+            const locked = !input.checked && missing.length > 0;
+            input.dataset.locked = locked ? "true" : "false";
+            input.disabled = locked || (!input.checked && n >= progression.target);
+            const option = input.closest(".tcm-advancement-option");
+            option?.classList.toggle("is-locked", locked);
+            const note = option?.querySelector(".tcm-improvement-prerequisite");
+            if (note) note.textContent = missing.length ? `Requires: ${missing.join(", ")}` : "";
+          }
         };
         for (const input of boxes) {
           const option = input.closest(".tcm-advancement-option");
