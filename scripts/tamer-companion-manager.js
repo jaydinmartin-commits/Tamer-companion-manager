@@ -96,22 +96,22 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static parseImprovementPrerequisites(item) {
+    const flags = item?.flags?.[MODULE_ID] ?? {};
+    const system = item?.system ?? {};
+    const structuredLevel = Number(flags.minimumTamerLevel ?? system.minimumTamerLevel ?? system.prerequisites?.minimumTamerLevel ?? system.requirements?.minimumTamerLevel ?? 0);
+    const structuredNames = [
+      ...(Array.isArray(flags.prerequisiteImprovements) ? flags.prerequisiteImprovements : []),
+      ...(Array.isArray(system.prerequisites?.improvements) ? system.prerequisites.improvements : []),
+      ...(Array.isArray(system.requirements?.improvements) ? system.requirements.improvements : [])
+    ].map(x => String(x?.name ?? x?.label ?? x ?? "").trim()).filter(Boolean);
+    if (structuredLevel > 0 || structuredNames.length) return { text: [structuredLevel > 0 ? "Tamer level " + structuredLevel : "", structuredNames.join(", ")].filter(Boolean).join(", "), level: structuredLevel > 0 ? structuredLevel : 0, names: structuredNames };
     const text = this.getImprovementDescription(item);
-    const match = text.match(/Prerequisite\s*:\s*([^\.\n]+)/i);
+    const match = text.match(/Prerequisite\\s*:\\s*([^\\.\\n]+)/i);
     if (!match) return { text: "", level: 0, names: [] };
-
     const raw = match[1].trim();
-    const levelMatch = raw.match(/(?:(?:tamer\s+)?level\s+)?(\d+)(?:st|nd|rd|th)?-?level\s+tamer/i)
-      ?? raw.match(/(\d+)(?:st|nd|rd|th)-level\s+tamer/i);
+    const levelMatch = raw.match(/(?:(?:tamer\\s+)?level\\s+)?(\\d+)(?:st|nd|rd|th)?-?level\\s+tamer/i);
     const level = levelMatch ? Number(levelMatch[1]) : 0;
-
-    const names = raw
-      .replace(/(?:(?:tamer\s+)?level\s+)?\d+(?:st|nd|rd|th)?-?level\s+tamer/ig, "")
-      .replace(/tamer\s+level\s+\d+/ig, "")
-      .split(/,|\band\b/i)
-      .map(x => x.trim())
-      .filter(x => x && !/^—$/.test(x) && !/^become(?: a)? tamer(?:’s|')? companion$/i.test(x));
-
+    const names = raw.replace(/(?:(?:tamer\\s+)?level\\s+)?\\d+(?:st|nd|rd|th)?-?level\\s+tamer/ig, "").replace(/tamer\\s+level\\s+\\d+/ig, "").split(/,|\\band\\b/i).map(x => x.trim()).filter(x => x && !/^—$/.test(x) && !/^become(?: a)? tamer(?:’s|')? companion$/i.test(x));
     return { text: raw, level, names };
   }
 
@@ -183,11 +183,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             const eligibility = this.getImprovementEligibility(item, actor, level, selectedUuids, optionsByName);
             const locked = !selected.has(uuid) && !eligibility.eligible;
             const prereqData = encodeURIComponent(JSON.stringify(prereq));
-            const tooltipHtml = this.getImprovementDescriptionHTML(item).replace(/"/g, "&quot;").replace(/\r?\n/g, " ");
+            const tooltipHtml = encodeURIComponent(this.getImprovementDescriptionHTML(item));
 
             return `
               <label class="tcm-advancement-option${locked ? " is-locked" : ""}"
-                data-tooltip-html="${tooltipHtml}"
+                data-tooltip-html="${esc(tooltipHtml)}"
                 data-tooltip-class="tcm-improvement-tooltip"
                 data-tooltip-direction="RIGHT">
                 <input type="checkbox" name="improvement" value="${esc(uuid)}"${selected.has(uuid) ? " checked" : ""}${locked ? " disabled" : ""} data-prerequisites="${esc(prereqData)}">
