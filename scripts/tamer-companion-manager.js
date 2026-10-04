@@ -141,8 +141,16 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     if (!options.length) return ui.notifications.info(`${actor.name} has no registered improvement Items available.`);
 
+    // Hide improvements whose Tamer-level prerequisite is not yet met.
+    // Already-selected improvements remain visible so they can still be removed.
+    const visibleOptions = options.filter(({ item }) => {
+      if (selected.has(item.uuid)) return true;
+      const prereq = this.parseImprovementPrerequisites(item);
+      return !prereq.level || level >= prereq.level;
+    });
+
     const groups = new Map();
-    for (const entry of options) {
+    for (const entry of visibleOptions) {
       if (!groups.has(entry.tree)) groups.set(entry.tree, []);
       groups.get(entry.tree).push(entry);
     }
