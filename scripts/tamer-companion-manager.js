@@ -172,15 +172,17 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         ui.notifications.warn(`Could not resolve improvement ${sourceUuid}; it was not added.`);
         continue;
       }
+
       const data = source.toObject();
       delete data._id;
-      const created = await actor.createEmbeddedDocuments("Item", [data]);
-      if (!created?.length) continue;
+      const added = await this.addImprovementItem(actor, data, source.uuid);
+      if (!added) return false;
+
       target.improvements.push({
-        itemUuid: created[0].uuid,
-        itemId: created[0].id,
+        itemUuid: added.uuid,
+        itemId: added.id,
         sourceUuid: source.uuid,
-        name: created[0].name,
+        name: added.name,
         assignedAtLevel: level
       });
     }
@@ -188,6 +190,61 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     await this.save(tamer, records);
     ui.notifications.info(`${actor.name}'s improvements were updated.`);
     return true;
+  }
+
+  /**
+   * Add an improvement while respecting any D&D 5e Advancements configured on
+   * the source Item. Directly embedding an Item would copy the advancement
+   * definition but bypass the system's player-choice workflow.
+   */
+  static async addImprovementItem(actor, data, sourceUuid) {
+    const AdvancementManager = dnd5e?.applications?.advancement?.AdvancementManager;
+    const hasAdvancement = Object.keys(data.system?.advancement ?? {}).length > 0;
+
+    if (!hasAdvancement || !AdvancementManager) {
+      const created = await actor.createEmbeddedDocuments("Item", [data]);
+      return created?.[0] ?? null;
+    }
+
+    const manager = AdvancementManager.forNewItem(actor, data);
+    if (!manager?.steps?.length) {
+      const created = await actor.createEmbeddedDocuments("Item", [data]);
+      return created?.[0] ?? null;
+    }
+
+    return await new Promise(async resolve => {
+      let completed = false;
+      let settled = false;
+      const finish = value => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+
+      const originalClose = manager.close.bind(manager);
+      manager.close = async options => {
+        const result = await originalClose(options);
+        if (!completed) finish(null);
+        return result;
+      };
+
+      const hookId = Hooks.once("dnd5e.advancementManagerComplete", completedManager => {
+        if (completedManager !== manager) return;
+        completed = true;
+        const created = actor.items.find(item => item.flags?.dnd5e?.sourceId === sourceUuid)
+          ?? actor.items.find(item => item.name === data.name && item.id !== data._id);
+        finish(created ?? null);
+      });
+
+      try {
+        await manager.render(true);
+      } catch (error) {
+        Hooks.off("dnd5e.advancementManagerComplete", hookId);
+        console.error("[Tamer Companion Manager] Improvement advancement failed.", error);
+        ui.notifications.error(`The advancement for ${data.name} could not be completed. See the browser console for details.`);
+        finish(null);
+      }
+    });
   }
 
   static getProgression(record,actor,level) {
