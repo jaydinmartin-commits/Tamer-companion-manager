@@ -201,8 +201,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const item of standard) sources.set(item.uuid, { item, tree: "Monster Trainer Improvements" });
     for (const item of bespoke) sources.set(item.uuid, { item, tree: tree.name });
 
-    const selected = new Map((record?.improvements ?? []).map(entry => [String(entry.sourceUuid ?? ""), entry]));
-    const options = [...sources.values()];
+    const bonusSelected = new Set((record?.improvements ?? []).filter(entry => entry?.isBonus).map(entry => String(entry.sourceUuid ?? "")));
+    const selected = new Map((record?.improvements ?? []).filter(entry => !entry?.isBonus).map(entry => [String(entry.sourceUuid ?? ""), entry]));
+    const options = [...sources.values()].filter(({ item }) => !bonusSelected.has(item.uuid));
     for (const entry of selected.values()) {
       if (sources.has(entry.sourceUuid)) continue;
       const item = entry.itemUuid ? await fromUuid(entry.itemUuid).catch(() => null) : null;
@@ -402,7 +403,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       ui.notifications.warn(`Cannot save improvements because prerequisites are missing: ${missingPrerequisites.join("; ")}.`);
       return false;
     }
-    const current = new Map((record?.improvements ?? []).map(entry => [String(entry.sourceUuid ?? ""), entry]));
+    const current = new Map((record?.improvements ?? []).filter(entry => !entry?.isBonus).map(entry => [String(entry.sourceUuid ?? ""), entry]));
     const records = this.records(tamer);
     const target = records.find(r => r.id === record.id);
     if (!target) return false;
@@ -564,7 +565,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static getProgression(record,actor,level) {
-    const chosen = (record?.improvements ?? []).length;
+    const chosen = (record?.improvements ?? []).filter(entry => !entry?.isBonus).length;
     // Monster Trainer grants one improvement whenever you gain a level beyond 1st.
     // Therefore a 1st-level Tamer has 0 choices, a 2nd-level Tamer has 1, etc.
     const target = Math.max(0, Number(level) - 1);
