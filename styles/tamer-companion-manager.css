@@ -179,3 +179,23 @@
   .tcm-registry-header button{width:100%}
   .tcm-registry-card .tcm-actions{width:100%}
 }
+
+/* v0.1.37 registry editor: let the ApplicationV2 content itself scroll */
+#tamer-bespoke-improvements .window-content{
+  padding:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+#tamer-bespoke-improvements .tcm-registry{
+  height:auto;
+  min-height:100%;
+  box-sizing:border-box;
+  overflow:visible;
+}
+#tamer-bespoke-improvements .tcm-registry-editor{
+  min-height:0;
+}
+#tamer-bespoke-improvements .tcm-registry-editor .tcm-tree-sources{
+  max-height:260px;
+  overflow-y:auto;
+}
