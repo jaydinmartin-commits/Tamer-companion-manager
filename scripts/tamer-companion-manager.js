@@ -136,185 +136,63 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async summon(tamer, record) {
     if (!canvas?.scene || !canvas.tokens) {
-      ui.notifications.warn("A scene must be active.");
-      return false;
+      ui.notifications.warn("A scene must be active."); return false;
     }
-
     const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
-    if (!actor) {
-      ui.notifications.error("The companion Actor could not be found.");
-      return false;
-    }
-
+    if (!actor) { ui.notifications.error("The companion Actor could not be found."); return false; }
     const records = this.records(tamer);
-    if (await this.summonedRecord(records)) {
-      ui.notifications.warn("Another companion is already summoned.");
-      return false;
-    }
-
+    if (await this.summonedRecord(records)) { ui.notifications.warn("Another companion is already summoned."); return false; }
     const tamerToken = this.tamerToken(tamer);
-    if (!tamerToken) {
-      ui.notifications.warn("Place the Tamer's token on the current scene first.");
-      return false;
-    }
+    if (!tamerToken) { ui.notifications.warn("Place the Tamer's token on the current scene first."); return false; }
 
-    const previousLayer = canvas.activeLayer;
-    if (canvas.tokens !== previousLayer) {
-      canvas.tokens.activate({ tool: "select" });
-    } else if (!canvas.tokens.active) {
-      canvas.tokens.activate({ tool: "select" });
-    }
-
-    // Foundry's native placement workflow owns pointer movement and click
-    // confirmation. Do not override eventMode or install secondary handlers.
     const grid = canvas.grid;
-    const tamerCenter = tamerToken.center;
-    const range = 30;
-    const closeRange = 5;
+    const size = grid.size;
     const tokenDoc = await actor.getTokenDocument({}, { parent: canvas.scene });
-
-    // Temporary diagnostic instrumentation for Foundry v14 native placement.
-    // This does not replace or intercept placement; it only records the native
-    // event path so we can identify why left-click confirmation is being lost.
-    const DEBUG = "[Tamer Companion Manager][Placement Debug]";
-    const stage = canvas.stage;
-    const tokenLayer = canvas.tokens;
-    const diagnostic = {
-      startedAt: Date.now(),
-      activeLayer: canvas.activeLayer?.constructor?.name ?? "unknown",
-      tokenLayerActive: Boolean(tokenLayer.active),
-      tokenLayerEventMode: tokenLayer.eventMode,
-      hasPreviewBefore: tokenLayer.hasPreview,
-      hasPlacementContextBefore: Boolean(tokenLayer._placementContext)
-    };
-    console.groupCollapsed(DEBUG + " Native placement started");
-    console.log(diagnostic);
-    console.log(DEBUG, "TokenLayer", tokenLayer);
-    console.groupEnd();
-
-    const onStagePointerDown = event => {
-      console.log(DEBUG, "Canvas stage pointerdown", {
-        button: event.button,
-        pointerType: event.pointerType,
-        target: event.target?.constructor?.name,
-        activeLayer: canvas.activeLayer?.constructor?.name,
-        tokenLayerActive: Boolean(tokenLayer.active),
-        hasPreview: tokenLayer.hasPreview,
-        hasPlacementContext: Boolean(tokenLayer._placementContext)
-      });
-    };
-    const onStagePointerUp = event => {
-      console.log(DEBUG, "Canvas stage pointerup", {
-        button: event.button,
-        pointerType: event.pointerType,
-        target: event.target?.constructor?.name,
-        hasPreview: tokenLayer.hasPreview,
-        hasPlacementContext: Boolean(tokenLayer._placementContext)
-      });
-    };
-
-    stage?.on("pointerdown", onStagePointerDown);
-    stage?.on("pointerup", onStagePointerUp);
-
-    const originalTokenClick = tokenLayer._onClickLeft;
-    let nativeClickCount = 0;
-    if (typeof originalTokenClick === "function") {
-      tokenLayer._onClickLeft = function(event) {
-        nativeClickCount += 1;
-        console.log(DEBUG, "TokenLayer _onClickLeft reached", {
-          count: nativeClickCount,
-          button: event?.button,
-          hasPreview: tokenLayer.hasPreview,
-          hasPlacementContext: Boolean(tokenLayer._placementContext)
-        });
-        return originalTokenClick.call(this, event);
-      };
-    } else {
-      console.warn(DEBUG, "TokenLayer _onClickLeft was not available for diagnostic wrapping.");
-    }
-
-    let placed;
-    try {
-      placed = await canvas.tokens.placeTokens([tokenDoc.toObject()], {
-        allowRotation: false,
-        createOptions: {
-          controlObject: false
-        },
-        preConfirm: ({ document }) => {
-          console.log(DEBUG, "preConfirm reached", {
-            x: document.x,
-            y: document.y,
-            width: document.width,
-            height: document.height,
-            hasPreview: tokenLayer.hasPreview,
-            hasPlacementContext: Boolean(tokenLayer._placementContext)
-          });
-
-          const center = {
-            x: document.x + (document.width * grid.sizeX) / 2,
-            y: document.y + (document.height * grid.sizeY) / 2
-          };
-
-          const distance = grid.measureDistance(tamerCenter, center);
-          console.log(DEBUG, "preConfirm distance", distance);
-          if (distance > range) {
-            ui.notifications.warn("The companion must be summoned within 30 feet of the Tamer.");
-            console.warn(DEBUG, "preConfirm rejected: out of range.");
-            return false;
-          }
-
-          const withinCloseRange = distance <= closeRange;
-          const visible = canvas.visibility?.testVisibility(center, { object: tamerToken }) ?? true;
-
-          if (!withinCloseRange && !visible) {
-            ui.notifications.warn("The companion must be within 30 feet and within the Tamer's line of sight, or within 5 feet of the Tamer.");
-            console.warn(DEBUG, "preConfirm rejected: not visible and beyond 5 feet.");
-            return false;
-          }
-
-          console.log(DEBUG, "preConfirm accepted.");
-          return true;
+    const tokenWidth = Number(tokenDoc.width ?? 1);
+    const tokenHeight = Number(tokenDoc.height ?? 1);
+    const tamerCenter = tamerToken.center;
+    const candidates = [];
+    for (let radius = 1; radius <= 3; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          candidates.push({ x: tamerToken.document.x + dx * size, y: tamerToken.document.y + dy * size });
         }
-      });
-      console.log(DEBUG, "placeTokens promise resolved", {
-        placedCount: placed?.length ?? 0,
-        nativeClickCount,
-        elapsedMs: Date.now() - diagnostic.startedAt
-      });
-    } finally {
-      stage?.off("pointerdown", onStagePointerDown);
-      stage?.off("pointerup", onStagePointerUp);
-      if (typeof originalTokenClick === "function") tokenLayer._onClickLeft = originalTokenClick;
-      console.log(DEBUG, "Native placement cleanup", {
-        nativeClickCount,
-        hasPreviewAfter: tokenLayer.hasPreview,
-        hasPlacementContextAfter: Boolean(tokenLayer._placementContext),
-        activeLayerAfter: canvas.activeLayer?.constructor?.name
-      });
-      // Leave the layer in Foundry's normal state. placeTokens itself owns
-      // creation/cancellation of its preview and click workflow.
-      if (previousLayer && previousLayer !== canvas.tokens) {
-        previousLayer.activate();
       }
     }
-
-    if (!placed.length) {
-      ui.notifications.info("Summoning cancelled.");
-      return false;
-    }
-
+    const occupied = canvas.tokens.placeables.filter(token => token.document?.id !== tamerToken.document?.id);
+    const withinFiveFeet = candidate => {
+      const center = { x: candidate.x + tokenWidth * size / 2, y: candidate.y + tokenHeight * size / 2 };
+      return grid.measureDistance(tamerCenter, center) <= 5;
+    };
+    const overlapsToken = candidate => {
+      const left = candidate.x, right = candidate.x + tokenWidth * size, top = candidate.y, bottom = candidate.y + tokenHeight * size;
+      return occupied.some(token => {
+        const tx = token.document.x, ty = token.document.y;
+        const tw = Number(token.document.width ?? 1) * size, th = Number(token.document.height ?? 1) * size;
+        return left < tx + tw && right > tx && top < ty + th && bottom > ty;
+      });
+    };
+    const inBounds = candidate => {
+      const sceneWidth = Number(canvas.scene.width ?? 0) * size, sceneHeight = Number(canvas.scene.height ?? 0) * size;
+      if (!sceneWidth || !sceneHeight) return true;
+      return candidate.x >= 0 && candidate.y >= 0 && candidate.x + tokenWidth * size <= sceneWidth && candidate.y + tokenHeight * size <= sceneHeight;
+    };
+    const position = candidates.find(candidate => withinFiveFeet(candidate) && inBounds(candidate) && !overlapsToken(candidate));
+    if (!position) { ui.notifications.warn("No unoccupied space within 5 feet of the Tamer was found."); return false; }
+    tokenDoc.updateSource({ x: position.x, y: position.y });
+    const created = await canvas.scene.createEmbeddedDocuments("Token", [tokenDoc.toObject()]);
+    const placed = created?.[0];
+    if (!placed) { ui.notifications.error("The companion Token could not be created."); return false; }
     const recordsAfterPlacement = this.records(tamer);
     const target = recordsAfterPlacement.find(r => r.id === record.id);
-    if (!target) return false;
-
-    target.tokenUuid = placed[0].uuid;
+    if (!target) { await placed.delete(); return false; }
+    target.tokenUuid = placed.uuid;
     target.status = "summoned";
     await this.save(tamer, recordsAfterPlacement);
-
     ui.notifications.info(`${actor.name} has been summoned.`);
     return true;
   }
-
   static async dismiss(tamer, record) {
     const records = this.records(tamer);
     const target = records.find(r => r.id === record.id);
