@@ -14,6 +14,19 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static PARTS = { main: { template: `modules/${MODULE_ID}/templates/companion-manager.hbs`, root: true } };
 
   async _prepareContext() {
+    // The Settings submenu constructs this Application without a Tamer.
+    // Render a harmless placeholder first; _onFirstRender will prompt the
+    // user to choose which Tamer's Pocket Family to manage.
+    if (!this.tamer) {
+      return {
+        tamer: { name: "Select a Tamer", img: "icons/svg/mystery-man.svg", level: 0 },
+        pocketFamily: { slots: 0, occupied: 0, empty: [] },
+        limits: { size: "Small", cr: 0.5 },
+        soulBond: { current: 0, max: 0 },
+        companions: []
+      };
+    }
+
     const level = TamerCompanionManager.getTamerLevel(this.tamer), slots = TamerCompanionManager.getPocketFamilySlots(level), records = TamerCompanionManager.records(this.tamer);
     const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: record.vesselName || "No vessel assigned", linked: Boolean(actor), summoned: Boolean(token), progression }; }));
     const soulBondFeature = TamerCompanionManager.getSoulBondFeature(this.tamer);
@@ -443,6 +456,20 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     await TamerCompanionManager.save(this.tamer,records);
     ui.notifications.info(tree?`${actor.name} has been bonded with ${tree.name} improvements available.`:`${actor.name} has been bonded as a companion.`);
     await this.render({force:true}); return true;
+  }
+
+  async _onFirstRender(context, options) {
+    await super._onFirstRender(context, options);
+    if (this.tamer) return;
+
+    const tamer = await TamerCompanionManager.chooseTamer();
+    if (!tamer) {
+      await this.close();
+      return;
+    }
+
+    this.tamer = tamer;
+    await this.render({ force: true });
   }
 
   async _onRender(context, options) { await super._onRender(context, options); if (this.element) this._tcmDragDrop.bind(this.element); }
