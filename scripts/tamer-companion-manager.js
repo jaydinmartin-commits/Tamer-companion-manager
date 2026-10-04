@@ -133,7 +133,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     // as another prerequisite.
     const html = this.getImprovementDescriptionHTML(item);
     const htmlMatch = html.match(
-      /Prerequisite\s*:\s*([\\s\\S]*?)(?:<\\/p>|<br\\s*\\/?>|<\\/li>|$)/i
+      /Prerequisite\s*:\s*([\s\S]*?)(?:<\/p>|<br\s*\/?>|<\/li>|$)/i
     );
 
     let raw = "";
@@ -144,11 +144,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         .replace(/&amp;/gi, "&")
         .replace(/&quot;/gi, '"')
         .replace(/&#39;/gi, "'")
-        .replace(/\\s+/g, " ")
+        .replace(/\s+/g, " ")
         .trim();
     } else {
       const text = this.getImprovementDescription(item);
-      const match = text.match(/Prerequisite\s*:\s*([^\\n.]+)/i);
+      const match = text.match(/Prerequisite\s*:\s*([^\n.]+)/i);
       if (!match) return { text: "", level: 0, names: [] };
       raw = match[1].trim();
     }
@@ -156,15 +156,15 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!raw) return { text: "", level: 0, names: [] };
 
     const levelMatch =
-      raw.match(/(\\d+)\\s*(?:st|nd|rd|th)?\\s*-?\\s*level\\s+tamer/i) ??
-      raw.match(/tamer\\s+level\\s+(\\d+)/i);
+      raw.match(/(\d+)\s*(?:st|nd|rd|th)?\s*-?\s*level\s+tamer/i) ??
+      raw.match(/tamer\s+level\s+(\d+)/i);
 
     const level = levelMatch ? Number(levelMatch[1]) : 0;
 
     const names = raw
-      .replace(/\\d+\\s*(?:st|nd|rd|th)?\\s*-?\\s*level\\s+tamer/ig, "")
-      .replace(/tamer\\s+level\\s+\\d+/ig, "")
-      .split(/,|\\band\\b/i)
+      .replace(/\d+\s*(?:st|nd|rd|th)?\s*-?\s*level\s+tamer/ig, "")
+      .replace(/tamer\s+level\s+\d+/ig, "")
+      .split(/,|\band\b/i)
       .map(x => x.trim())
       .filter(x =>
         x &&
