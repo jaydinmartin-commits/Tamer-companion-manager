@@ -15,7 +15,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _prepareContext() {
     const level = TamerCompanionManager.getTamerLevel(this.tamer), slots = TamerCompanionManager.getPocketFamilySlots(level), records = TamerCompanionManager.records(this.tamer);
-    const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; return { index, slot: index + 1, name: actor?.name ?? record.name ?? "Unlinked Companion", img: actor?.img ?? "icons/svg/mystery-man.svg", type: actor?.system?.details?.type?.value ?? actor?.system?.details?.type ?? "Creature", hp: actor?.system?.attributes?.hp?.value ?? 0, hpMax: actor?.system?.attributes?.hp?.max ?? 0, ac: actor?.system?.attributes?.ac?.value ?? 0, vessel: record.vesselName || "No vessel assigned", linked: Boolean(actor), summoned: Boolean(token), progression }; }));
+    const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: record.vesselName || "No vessel assigned", linked: Boolean(actor), summoned: Boolean(token), progression }; }));
     const soulBondMax = 5 * level, soulBondPool = Number(this.tamer.getFlag(MODULE_ID, "soulBondPool") ?? soulBondMax);
     if (Number(this.tamer.getFlag(MODULE_ID, "soulBondPool")) !== soulBondPool) await this.tamer.setFlag(MODULE_ID, "soulBondPool", soulBondPool);
     return { tamer: { name: this.tamer.name, img: this.tamer.img, level }, pocketFamily: { slots, occupied: companions.length, empty: Array.from({ length: Math.max(0, slots - companions.length) }, (_, i) => i) }, limits: { size: TamerCompanionManager.getMaxCompanionSize(level), cr: TamerCompanionManager.getMaxCompanionCR(level) }, soulBond: { pool: soulBondPool, max: soulBondMax }, companions };
@@ -55,27 +55,146 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     return [...standard.map(item=>({item,tree:"Monster Trainer Improvements"})),...bespoke.map(item=>({item,tree:tree.name}))]
       .filter(e=>{if(owned.has(e.item.uuid)||seen.has(e.item.uuid))return false;seen.add(e.item.uuid);return true;});
   }
-  static async chooseImprovement(tamer,record,actor) {
-    const progression = this.getProgression(record, actor, this.getTamerLevel(tamer));
-    if (progression.pending <= 0) return ui.notifications.info(`${actor.name} has no improvement choices pending at this Tamer level.`);
-    const options=await this.getAvailableImprovements(actor,record);
-    if(!options.length)return ui.notifications.info(`${actor.name} has no registered improvement Items available.`);
-    const groups=new Map();
-    for(const e of options){if(!groups.has(e.tree))groups.set(e.tree,[]);groups.get(e.tree).push(e);}
-    const html=[...groups.entries()].map(([tree,entries])=>`<optgroup label="${foundry.utils.escapeHTML(tree)}">${entries.map(({item})=>`<option value="${foundry.utils.escapeHTML(item.uuid)}">${foundry.utils.escapeHTML(item.name)}</option>`).join("")}</optgroup>`).join("");
-    const result=await foundry.applications.api.DialogV2.input({window:{title:`Choose Improvement — ${actor.name}`},content:`<div class="tcm-training-dialog"><p>Select an available Monster Trainer Improvement.</p><div class="form-group"><label>Improvement</label><select name="improvement">${html}</select></div></div>`,ok:{label:"Choose Improvement"}});
-    if(!result?.improvement)return false;
-    const source=await fromUuid(result.improvement).catch(()=>null);
-    if(!source||source.documentName!=="Item")return ui.notifications.error("The selected improvement could not be resolved.");
-    const data=source.toObject(); delete data._id;
-    const created=await actor.createEmbeddedDocuments("Item",[data]); if(!created?.length)return false;
-    const records=this.records(tamer),target=records.find(r=>r.id===record.id); if(!target)return false;
-    target.improvements??=[]; target.improvements.push({itemUuid:created[0].uuid,itemId:created[0].id,sourceUuid:source.uuid,name:created[0].name,assignedAtLevel:this.getTamerLevel(tamer)});
-    await this.save(tamer,records); ui.notifications.info(`${source.name} added to ${actor.name}.`); return true;
+  static async manageImprovements(tamer, record, actor) {
+    const level = this.getTamerLevel(tamer);
+    const progression = this.getProgression(record, actor, level);
+    const standard = await this.getStandardImprovementItems();
+    const tree = await this.findBespokeTree(actor);
+    const bespoke = tree ? await this.resolveTreeItems(tree) : [];
+    const sources = new Map();
+
+    for (const item of standard) sources.set(item.uuid, { item, tree: "Monster Trainer Improvements" });
+    for (const item of bespoke) sources.set(item.uuid, { item, tree: tree.name });
+
+    const selected = new Map((record?.improvements ?? []).map(entry => [String(entry.sourceUuid ?? ""), entry]));
+    const options = [...sources.values()];
+    for (const entry of selected.values()) {
+      if (sources.has(entry.sourceUuid)) continue;
+      const item = entry.itemUuid ? await fromUuid(entry.itemUuid).catch(() => null) : null;
+      if (item) options.push({ item, tree: "Selected Improvement" });
+    }
+
+    if (!options.length) return ui.notifications.info(`${actor.name} has no registered improvement Items available.`);
+
+    const groups = new Map();
+    for (const entry of options) {
+      if (!groups.has(entry.tree)) groups.set(entry.tree, []);
+      groups.get(entry.tree).push(entry);
+    }
+
+    const checked = uuid => selected.has(uuid) ? " checked" : "";
+    const groupHtml = [...groups.entries()].map(([treeName, entries]) => `
+      <section class="tcm-advancement-group">
+        <h3>${foundry.utils.escapeHTML(treeName)}</h3>
+        <div class="tcm-advancement-options">
+          ${entries.sort((a,b) => a.item.name.localeCompare(b.item.name)).map(({item}) => `
+            <label class="tcm-advancement-option">
+              <input type="checkbox" name="improvement" value="${foundry.utils.escapeHTML(item.uuid)}"${checked(item.uuid)}>
+              <span class="tcm-advancement-check"></span>
+              <span class="tcm-advancement-text">
+                <strong>${foundry.utils.escapeHTML(item.name)}</strong>
+                <small>${foundry.utils.escapeHTML(item.system?.description?.value ? foundry.utils.textToHTML?.(item.system.description.value) ?? "" : "")}</small>
+              </span>
+            </label>
+          `).join("")}
+        </div>
+      </section>
+    `).join("");
+
+    const content = `
+      <div class="tcm-advancement">
+        <div class="tcm-advancement-header">
+          <div>
+            <h2>Monster Trainer Improvements</h2>
+            <p>Choose up to <strong>${progression.target}</strong> improvement${progression.target === 1 ? "" : "s"}. Checked improvements are currently applied to this companion. You can remove or replace them later.</p>
+          </div>
+          <div class="tcm-advancement-count"><strong class="tcm-selected-count">${selected.size}</strong> / ${progression.target}</div>
+        </div>
+        <div class="tcm-advancement-list">${groupHtml}</div>
+      </div>`;
+
+    const result = await foundry.applications.api.DialogV2.wait({
+      window: { title: `Manage Improvements — ${actor.name}`, resizable: true },
+      position: { width: 720, height: 650 },
+      content,
+      buttons: [
+        {
+          action: "save",
+          label: "Save Changes",
+          default: true,
+          callback: (event, button) => {
+            const values = [...button.form.querySelectorAll('input[name="improvement"]:checked')].map(input => input.value);
+            if (values.length > progression.target) {
+              ui.notifications.warn(`This companion can have at most ${progression.target} selected improvement${progression.target === 1 ? "" : "s"} at Tamer level ${level}.`);
+              return null;
+            }
+            return values;
+          }
+        },
+        { action: "cancel", label: "Cancel" }
+      ],
+      render: (dialog) => {
+        const root = dialog.element;
+        const boxes = [...root.querySelectorAll('input[name="improvement"]')];
+        const count = root.querySelector(".tcm-selected-count");
+        const updateCount = () => {
+          const n = boxes.filter(input => input.checked).length;
+          if (count) count.textContent = n;
+          for (const input of boxes) {
+            input.disabled = !input.checked && n >= progression.target;
+          }
+        };
+        for (const input of boxes) input.addEventListener("change", updateCount);
+        updateCount();
+      }
+    });
+
+    if (!Array.isArray(result)) return false;
+
+    const desired = new Set(result);
+    const current = new Map((record?.improvements ?? []).map(entry => [String(entry.sourceUuid ?? ""), entry]));
+    const records = this.records(tamer);
+    const target = records.find(r => r.id === record.id);
+    if (!target) return false;
+    target.improvements ??= [];
+
+    for (const [sourceUuid, entry] of current) {
+      if (desired.has(sourceUuid)) continue;
+      const embedded = entry.itemUuid ? await fromUuid(entry.itemUuid).catch(() => null) : null;
+      if (embedded?.documentName === "Item") await embedded.delete();
+      target.improvements = target.improvements.filter(x => String(x.sourceUuid ?? "") !== sourceUuid);
+    }
+
+    for (const sourceUuid of desired) {
+      if (current.has(sourceUuid)) continue;
+      const source = await fromUuid(sourceUuid).catch(() => null);
+      if (!source || source.documentName !== "Item") {
+        ui.notifications.warn(`Could not resolve improvement ${sourceUuid}; it was not added.`);
+        continue;
+      }
+      const data = source.toObject();
+      delete data._id;
+      const created = await actor.createEmbeddedDocuments("Item", [data]);
+      if (!created?.length) continue;
+      target.improvements.push({
+        itemUuid: created[0].uuid,
+        itemId: created[0].id,
+        sourceUuid: source.uuid,
+        name: created[0].name,
+        assignedAtLevel: level
+      });
+    }
+
+    await this.save(tamer, records);
+    ui.notifications.info(`${actor.name}'s improvements were updated.`);
+    return true;
   }
+
   static getProgression(record,actor,level) {
     const chosen = (record?.improvements ?? []).length;
-    const target = 1 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0) + (level >= 9 ? 1 : 0) + (level >= 13 ? 1 : 0) + (level >= 17 ? 1 : 0);
+    // Monster Trainer grants one improvement whenever you gain a level beyond 1st.
+    // Therefore a 1st-level Tamer has 0 choices, a 2nd-level Tamer has 1, etc.
+    const target = Math.max(0, Number(level) - 1);
     const bespokeHitDice = record?.bespokeTreeId ? [3, 5, 11, 17].filter(l => Number(level) >= l).length : 0;
     return {
       target,
@@ -90,7 +209,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static async spendSoulBond(tamer, records, index, amount) {
     const pool = Number(tamer.getFlag(MODULE_ID, "soulBondPool") ?? 5 * this.getTamerLevel(tamer));
     if (pool <= 0) return ui.notifications.warn("The Tamer's Soul Bond healing pool is empty.");
-    const record = records[index], actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+    const record = records[index], baseActor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+    const token = record?.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null;
+    const actor = token?.actor ?? baseActor;
     if (!actor) return ui.notifications.error("The companion Actor could not be found.");
     const hp = Number(actor.system?.attributes?.hp?.value ?? 0), max = Number(actor.system?.attributes?.hp?.max ?? 0);
     const healing = Math.max(0, Math.min(Number(amount) || 0, pool, max - hp));
@@ -152,7 +273,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const record=TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)];
     const actor=record?.actorUuid?await fromUuid(record.actorUuid).catch(()=>null):null;
     if(!record||!actor)return;
-    if(await TamerCompanionManager.chooseImprovement(this.tamer,record,actor))await this.render({force:true});
+    const progression=TamerCompanionManager.getProgression(record,actor,TamerCompanionManager.getTamerLevel(this.tamer));
+    if(progression.target<=0 && progression.chosen<=0) return ui.notifications.info(`${actor.name} does not have an improvement available until Tamer level 2.`);
+    if(await TamerCompanionManager.manageImprovements(this.tamer,record,actor))await this.render({force:true});
   }
 
   static async _onSoulBond() { const records = TamerCompanionManager.records(this.tamer); const choices = records.map((r,i) => `<option value="${i}">${foundry.utils.escapeHTML(r.name ?? `Companion ${i+1}`)}</option>`).join(""); if (!choices) return ui.notifications.warn("No companions are bonded."); const pool = Number(this.tamer.getFlag(MODULE_ID, "soulBondPool") ?? 5 * TamerCompanionManager.getTamerLevel(this.tamer)); const result = await foundry.applications.api.DialogV2.input({ window: { title: "Soul Bond" }, content: `<div class="form-group"><label>Companion</label><select name="index">${choices}</select></div><div class="form-group"><label>Healing (max ${pool})</label><input type="number" name="amount" min="1" max="${pool}" value="${pool}"></div><p class="hint">Soul Bond has a pool of 5 × Tamer level. It replenishes on a long rest and is spent among companions after a short rest.</p>`, ok: { label: "Restore HP" } }); if (!result) return; await TamerCompanionManager.spendSoulBond(this.tamer, records, Number(result.index), Number(result.amount)); await this.render({ force: true }); }
