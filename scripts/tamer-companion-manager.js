@@ -160,8 +160,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
     for (const [sourceUuid, entry] of current) {
       if (desired.has(sourceUuid)) continue;
-      const embedded = entry.itemUuid ? await fromUuid(entry.itemUuid).catch(() => null) : null;
-      if (embedded?.documentName === "Item") await embedded.delete();
+      const removed = await this.deleteImprovementItem(actor, entry.itemUuid);
+      if (!removed) return false;
       target.improvements = target.improvements.filter(x => String(x.sourceUuid ?? "") !== sourceUuid);
     }
 
@@ -193,22 +193,41 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   /**
+   * Refresh open Actor sheets after D&D 5e performs an advancement bulk update.
+   * The system updates the Actor synchronously, but an already-rendered sheet
+   * may still be displaying its previous prepared data until it is rendered.
+   */
+  static async refreshActorSheets(actor) {
+    for (const app of Object.values(actor?.apps ?? {})) {
+      if (!app?.rendered) continue;
+      try {
+        await app.render({ force: true });
+      } catch (error) {
+        console.warn("[Tamer Companion Manager] Could not refresh an Actor sheet.", error);
+      }
+    }
+  }
+
+  /**
    * Add an improvement while respecting any D&D 5e Advancements configured on
    * the source Item. Directly embedding an Item would copy the advancement
    * definition but bypass the system's player-choice workflow.
    */
   static async addImprovementItem(actor, data, sourceUuid) {
     const AdvancementManager = globalThis.dnd5e?.applications?.advancement?.AdvancementManager;
-    const hasAdvancement = Object.keys(data.system?.advancement ?? {}).length > 0;
+    const hasAdvancement = data.system?.advancement?.size > 0
+      || Object.keys(data.system?.advancement ?? {}).length > 0;
 
     if (!hasAdvancement || !AdvancementManager) {
       const created = await actor.createEmbeddedDocuments("Item", [data]);
+      if (created?.[0]) await this.refreshActorSheets(actor);
       return created?.[0] ?? null;
     }
 
     const manager = AdvancementManager.forNewItem(actor, data);
     if (!manager?.steps?.length) {
       const created = await actor.createEmbeddedDocuments("Item", [data]);
+      if (created?.[0]) await this.refreshActorSheets(actor);
       return created?.[0] ?? null;
     }
 
@@ -228,11 +247,12 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         return result;
       };
 
-      const hookId = Hooks.once("dnd5e.advancementManagerComplete", completedManager => {
+      const hookId = Hooks.once("dnd5e.advancementManagerComplete", async completedManager => {
         if (completedManager !== manager) return;
         completed = true;
         const created = actor.items.find(item => item.flags?.dnd5e?.sourceId === sourceUuid)
           ?? actor.items.find(item => item.name === data.name && item.id !== data._id);
+        await this.refreshActorSheets(actor);
         finish(created ?? null);
       });
 
@@ -243,6 +263,63 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         console.error("[Tamer Companion Manager] Improvement advancement failed.", error);
         ui.notifications.error(`The advancement for ${data.name} could not be completed. See the browser console for details.`);
         finish(null);
+      }
+    });
+  }
+
+  /**
+   * Remove an improvement through the official D&D 5e Advancement Manager so
+   * Ability Score, proficiency, HP, speed, and other advancement changes are
+   * reversed before the Item is deleted.
+   */
+  static async deleteImprovementItem(actor, itemUuid) {
+    const AdvancementManager = globalThis.dnd5e?.applications?.advancement?.AdvancementManager;
+    const item = itemUuid ? await fromUuid(itemUuid).catch(() => null) : null;
+    if (!item || item.documentName !== "Item") return true;
+
+    if (!AdvancementManager || !item.hasAdvancement) {
+      await item.delete();
+      await this.refreshActorSheets(actor);
+      return true;
+    }
+
+    const manager = AdvancementManager.forDeletedItem(actor, item.id);
+    if (!manager?.steps?.length) {
+      await item.delete();
+      await this.refreshActorSheets(actor);
+      return true;
+    }
+
+    return await new Promise(async resolve => {
+      let completed = false;
+      let settled = false;
+      const finish = value => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+
+      const originalClose = manager.close.bind(manager);
+      manager.close = async options => {
+        const result = await originalClose(options);
+        if (!completed) finish(false);
+        return result;
+      };
+
+      const hookId = Hooks.once("dnd5e.advancementManagerComplete", async completedManager => {
+        if (completedManager !== manager) return;
+        completed = true;
+        await this.refreshActorSheets(actor);
+        finish(true);
+      });
+
+      try {
+        await manager.render(true);
+      } catch (error) {
+        Hooks.off("dnd5e.advancementManagerComplete", hookId);
+        console.error("[Tamer Companion Manager] Improvement removal advancement failed.", error);
+        ui.notifications.error(`The advancement effects from ${item.name} could not be removed. See the browser console for details.`);
+        finish(false);
       }
     });
   }
