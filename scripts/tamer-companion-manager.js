@@ -679,8 +679,39 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if(actor.id===this.tamer.id||actor.uuid===this.tamer.uuid)return ui.notifications.warn("The Tamer cannot be linked as their own companion.");
     if(!(actor.isOwner||game.user.isGM))return ui.notifications.warn("You do not have permission to use that Actor as a companion.");
     if(records.some(r=>r.actorUuid===actor.uuid))return ui.notifications.warn(`${actor.name} is already linked to this Tamer.`);
+
     const tree=await TamerCompanionManager.findBespokeTree(actor);
-    records.push({id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0});
+    const record={id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0};
+
+    // Bespoke improvements with "become a tamer's companion" as their
+    // prerequisite are granted automatically when the creature is tamed.
+    // They are recorded as bonus improvements and never consume a normal
+    // Monster Trainer improvement choice.
+    if(tree){
+      const bespoke=await TamerCompanionManager.resolveTreeItems(tree);
+      for(const source of bespoke){
+        const prereq=TamerCompanionManager.parseImprovementPrerequisites(source);
+        if(!prereq.freeOnTaming) continue;
+        const data=source.toObject();
+        delete data._id;
+        const added=await TamerCompanionManager.addImprovementItem(actor,data,source.uuid);
+        if(!added){
+          ui.notifications.error(`Could not grant automatic improvement "${source.name}" to ${actor.name}.`);
+          return false;
+        }
+        record.improvements.push({
+          itemUuid:added.uuid,
+          itemId:added.id,
+          sourceUuid:source.uuid,
+          name:added.name,
+          assignedAtLevel:TamerCompanionManager.getTamerLevel(this.tamer),
+          isBonus:true,
+          bonusReason:"Become a Tamer's Companion"
+        });
+      }
+    }
+
+    records.push(record);
     await TamerCompanionManager.save(this.tamer,records);
     ui.notifications.info(tree?`${actor.name} has been bonded with ${tree.name} improvements available.`:`${actor.name} has been bonded as a companion.`);
     await this.render({force:true}); return true;
