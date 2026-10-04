@@ -322,29 +322,56 @@ Hooks.once("init", () => {
   };
 });
 
-Hooks.once("ready", () => {
-  // Foundry v14 / ApplicationV2 uses getHeaderControlsApplicationV2
-  // rather than the legacy getActorSheetHeaderButtons hook.
-  Hooks.on("getHeaderControlsApplicationV2", (app, controls) => {
-    if (!app?.actor || !TamerCompanionManager.isTamer(app.actor)) return;
-
-    controls.unshift({
-      label: "Companions",
-      icon: "fa-solid fa-paw",
-      onClick: () => TamerCompanionManager.open(app.actor)
-    });
+Hooks.once("init", () => {
+  game.settings.registerMenu(MODULE_ID, "openManager", {
+    name: "Tamer Companion Manager",
+    label: "Open Companion Manager",
+    hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.",
+    icon: "fa-solid fa-paw",
+    type: TamerCompanionManager,
+    restricted: false
   });
 
-  // Expose the public API for integrations, but no macro is required.
-  const module = game.modules.get(MODULE_ID);
-  if (module) {
-    module.api = {
-      open: actor => TamerCompanionManager.open(actor),
-      isTamer: actor => TamerCompanionManager.isTamer(actor),
-      getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor),
-      getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level)
-    };
-  }
+  game.tamerCompanionManager = {
+    open: actor => TamerCompanionManager.open(actor),
+    isTamer: actor => TamerCompanionManager.isTamer(actor),
+    getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor),
+    getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level)
+  };
+
+  const addCompanionControl = (app, controls) => {
+    const actor = app?.actor;
+    if (!actor || !TamerCompanionManager.isTamer(actor)) return;
+    if (controls.some(c => c.action === "tamer-companion-manager")) return;
+
+    controls.unshift({
+      action: "tamer-companion-manager",
+      label: "Companions",
+      icon: "fa-solid fa-paw",
+      ownership: "OWNER"
+    });
+  };
+
+  // Native v14 ApplicationV2 header-control hook.
+  Hooks.on("getHeaderControlsApplicationV2", addCompanionControl);
+
+  // Specific ActorSheetV2 hook, when available.
+  Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
+
+  // v14 header controls are action-driven. Intercept our action after the
+  // sheet renders so it opens the manager for this exact Actor.
+  Hooks.on("renderApplicationV2", (app, element) => {
+    if (!app?.actor || !TamerCompanionManager.isTamer(app.actor)) return;
+    const button = element.querySelector('[data-action="tamer-companion-manager"]');
+    if (!button || button.dataset.tamerCompanionBound === "true") return;
+
+    button.dataset.tamerCompanionBound = "true";
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      TamerCompanionManager.open(app.actor);
+    }, { capture: true });
+  });
 });
 
 globalThis.TamerCompanionManager = TamerCompanionManager;
