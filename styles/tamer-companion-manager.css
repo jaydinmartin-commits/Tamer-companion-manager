@@ -201,55 +201,66 @@
 }
 
 
-/* v0.1.39 improvement picker: native-scale controls and resize-safe footer */
-.tcm-improvement-dialog .dialog-content{
+/* v0.1.41 improvement picker: resize-safe native DialogV2 layout */
+.tcm-improvement-dialog form {
   display:flex;
   flex-direction:column;
   min-height:0;
   overflow:hidden;
 }
-.tcm-improvement-dialog .tcm-advancement{
+.tcm-improvement-dialog .dialog-content {
   flex:1 1 auto;
   min-height:0;
   overflow:hidden;
 }
-.tcm-improvement-dialog .tcm-advancement-list{
-  flex:1 1 auto;
+.tcm-improvement-dialog .tcm-advancement {
+  height:100%;
+  min-height:0;
+  overflow:hidden;
+}
+.tcm-improvement-dialog .tcm-advancement-list {
   min-height:0;
   max-height:none;
+  height:100%;
   overflow-y:auto;
 }
-.tcm-improvement-dialog .dialog-buttons,
-.tcm-improvement-dialog footer.form-footer{
+.tcm-improvement-dialog .form-footer {
   flex:0 0 auto;
   position:relative;
   z-index:2;
 }
-.tcm-advancement-option{
-  gap:6px;
-  padding:5px 7px;
+.tcm-advancement-option {
+  gap:8px;
+  padding:7px 9px;
 }
-.tcm-advancement-check{
-  flex:0 0 14px;
-  width:14px;
-  height:14px;
+.tcm-advancement-check {
+  flex:0 0 16px;
+  width:16px;
+  height:16px;
   margin-top:2px;
 }
-.tcm-advancement-icon{
-  flex:0 0 28px;
-  width:28px;
-  height:28px;
+.tcm-advancement-icon {
+  flex:0 0 30px;
+  width:30px;
+  height:30px;
   object-fit:contain;
 }
-.tcm-advancement-text{
+.tcm-advancement-text {
   gap:2px;
 }
-.tcm-advancement-text strong{
-  font-size:.78rem;
+.tcm-advancement-text strong {
+  font-size:.8rem;
 }
-.tcm-improvement-prerequisite{
+.tcm-improvement-prerequisite {
   font-size:.68rem;
 }
-.tcm-improvement-dialog .tcm-advancement-header{
-  flex:0 0 auto;
+.tcm-improvement-tooltip {
+  text-align:left;
+  max-width:420px;
+}
+.tcm-improvement-tooltip p {
+  margin:0 0 .35rem;
+}
+.tcm-improvement-tooltip p:last-child {
+  margin-bottom:0;
 }
