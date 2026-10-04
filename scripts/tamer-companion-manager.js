@@ -6,7 +6,7 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(options = {}) {
     super(options);
-    this.tamer = options.tamer ?? game?.actors?.contents?.find(a => TamerCompanionManager.isTamer(a) && (a.isOwner || game.user.isGM)) ?? null;
+    this.tamer = options.tamer ?? null;
     this._tcmDragDrop = new foundry.applications.ux.DragDrop({ dragSelector: null, dropSelector: ".tcm-drop-zone", permissions: { drop: () => this._canAcceptCompanionDrop() }, callbacks: { drop: event => this._onDropCompanion(event), dragover: event => this._onDragOverCompanion(event) } });
   }
 
@@ -282,7 +282,19 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static async dismiss(tamer, record) { const records = this.records(tamer), target = records.find(r => r.id === record.id); if (!target) return false; if (target.tokenUuid) { const token = await fromUuid(target.tokenUuid).catch(() => null); if (token) await token.delete(); } target.tokenUuid = null; target.status = "in-vessel"; await this.save(tamer, records); ui.notifications.info(`${target.name ?? "Companion"} returned to its vessel.`); return true; }
-  static async open(actor) { actor ??= game.actors.contents.find(a => this.isTamer(a) && (a.isOwner || game.user.isGM)); if (!actor) return ui.notifications.warn("No Tamer Actor was found. Create a character with the Tamer class first."); if (!this.isTamer(actor)) return ui.notifications.warn("This Actor does not have a Tamer class."); if (!(actor.isOwner || game.user.isGM)) return ui.notifications.warn("You do not have permission."); try { return await new TamerCompanionManager({ tamer: actor }).render({ force: true }); } catch (error) { console.error("[Tamer Companion Manager] Failed to open manager.", error); ui.notifications.error("The Tamer Companion Manager could not be opened. See the browser console for details."); return null; } }
+  static async open(actor) {
+    if (!actor) actor = await this.chooseTamer();
+    if (!actor) return null;
+    if (!this.isTamer(actor)) return ui.notifications.warn("This Actor does not have a Tamer class.");
+    if (!(actor.isOwner || game.user.isGM)) return ui.notifications.warn("You do not have permission.");
+    try {
+      return await new TamerCompanionManager({ tamer: actor }).render({ force: true });
+    } catch (error) {
+      console.error("[Tamer Companion Manager] Failed to open manager.", error);
+      ui.notifications.error("The Tamer Companion Manager could not be opened. See the browser console for details.");
+      return null;
+    }
+  }
   _canAcceptCompanionDrop() { if (!this.tamer || !TamerCompanionManager.isTamer(this.tamer)) return false; const records = TamerCompanionManager.records(this.tamer), max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer)); return records.length < max; }
   _onDragOverCompanion(event) { if (!this._canAcceptCompanionDrop()) return; event.dataTransfer.dropEffect = "link"; }
   async _onDropCompanion(event) { event.preventDefault(); if (!this._canAcceptCompanionDrop()) return ui.notifications.warn("No Pocket Family slot is available."); const data = TextEditor.getDragEventData(event); if (data?.type !== "Actor") return ui.notifications.warn("Only Actor documents can be added as companions."); let actor = data.uuid ? await fromUuid(data.uuid).catch(() => null) : null; if (!actor && globalThis.Actor?.implementation?.fromDropData) actor = await Actor.implementation.fromDropData(data).catch(() => null); if (!actor) return ui.notifications.error("The dropped Actor could not be resolved."); await this._linkCompanion(actor); }
@@ -301,6 +313,36 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onRender(context, options) { await super._onRender(context, options); if (this.element) this._tcmDragDrop.bind(this.element); }
   static async _onRefresh() { await this.render({ force: true }); }
+
+  static async chooseTamer() {
+    const tamers = game.actors.contents
+      .filter(actor => TamerCompanionManager.isTamer(actor) && (actor.isOwner || game.user.isGM))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (!tamers.length) {
+      ui.notifications.warn("No Tamer Actors were found that you can manage.");
+      return null;
+    }
+    if (tamers.length === 1) return tamers[0];
+
+    const options = tamers.map(actor => {
+      const level = TamerCompanionManager.getTamerLevel(actor);
+      return `<option value="${foundry.utils.escapeHTML(actor.uuid)}">${foundry.utils.escapeHTML(actor.name)} — Level ${level}</option>`;
+    }).join("");
+
+    const result = await foundry.applications.api.DialogV2.input({
+      window: { title: "Select Tamer Companion Storage" },
+      content: `
+        <p>Select which Tamer's Pocket Family you want to manage.</p>
+        <div class="form-group">
+          <label for="tcm-tamer-select">Tamer</label>
+          <select id="tcm-tamer-select" name="tamerUuid">${options}</select>
+        </div>
+      `,
+      ok: { label: "Open Companion Manager" }
+    });
+    if (!result?.tamerUuid) return null;
+    return await fromUuid(result.tamerUuid).catch(() => null);
+  }
   static async _onAddCompanion() { const records = TamerCompanionManager.records(this.tamer), max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer)); if (records.length >= max) return ui.notifications.warn("No Pocket Family slot is available."); const available = game.actors.contents.filter(a => a.id !== this.tamer.id && (a.isOwner || game.user.isGM)).filter(a => !records.some(r => r.actorUuid === a.uuid)).sort((a,b) => a.name.localeCompare(b.name)); if (!available.length) return ui.notifications.warn("No available Actors were found."); const options = available.map(a => `<option value="${foundry.utils.escapeHTML(a.uuid)}">${foundry.utils.escapeHTML(a.name)}</option>`).join(""); const result = await foundry.applications.api.DialogV2.input({ window: { title: "Link Companion" }, content: `<div class="form-group"><label for="tcm-companion-actor">Companion Actor</label><select id="tcm-companion-actor" name="actorUuid">${options}</select></div>`, ok: { label: "Link Companion" } }); if (!result?.actorUuid) return; const actor = await fromUuid(result.actorUuid).catch(() => null); if (!actor) return ui.notifications.error("Could not resolve that Actor."); await this._linkCompanion(actor); }
   static async _onOpenCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)], actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; actor?.sheet?.render({ force: true }); }
 
