@@ -4,17 +4,11 @@ const FLAG_KEY = "companions";
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
-  constructor(tamer = null, options = {}) {
-    // Foundry settings menus instantiate the registered Application class
-    // with the Application options object as the first argument.
-    // Our normal launcher passes an Actor instead.
-    const isActor = tamer?.documentName === "Actor" || tamer?.documentName === "Actor5e";
-    const actualOptions = isActor ? options : (tamer ?? options ?? {});
-    super(actualOptions);
-    this.tamer = isActor
-      ? tamer
-      : game?.actors?.contents?.find(a => TamerCompanionManager.isTamer(a) && (a.isOwner || game.user.isGM))
-        ?? null;
+  constructor(options = {}) {
+    super(options);
+    this.tamer = options.tamer
+      ?? game?.actors?.contents?.find(a => TamerCompanionManager.isTamer(a) && (a.isOwner || game.user.isGM))
+      ?? null;
   }
 
   static DEFAULT_OPTIONS = {
@@ -203,7 +197,13 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!actor) return ui.notifications.warn("No Tamer Actor was found. Create a character with the Tamer class first.");
     if (!this.isTamer(actor)) return ui.notifications.warn("This Actor does not have a Tamer class.");
     if (!(actor.isOwner || game.user.isGM)) return ui.notifications.warn("You do not have permission.");
-    return new TamerCompanionManager(actor).render({ force: true });
+    try {
+      return await new TamerCompanionManager({ tamer: actor }).render({ force: true });
+    } catch (error) {
+      console.error("[Tamer Companion Manager] Failed to open manager.", error);
+      ui.notifications.error("The Tamer Companion Manager could not be opened. See the browser console for details.");
+      return null;
+    }
   }
 
   async _onRefresh() {
@@ -322,22 +322,7 @@ Hooks.once("init", () => {
   };
 });
 
-Hooks.once("init", () => {
-  game.settings.registerMenu(MODULE_ID, "openManager", {
-    name: "Tamer Companion Manager",
-    label: "Open Companion Manager",
-    hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.",
-    icon: "fa-solid fa-paw",
-    type: TamerCompanionManager,
-    restricted: false
-  });
 
-  game.tamerCompanionManager = {
-    open: actor => TamerCompanionManager.open(actor),
-    isTamer: actor => TamerCompanionManager.isTamer(actor),
-    getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor),
-    getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level)
-  };
 
   const addCompanionControl = (app, controls) => {
     const actor = app?.actor;
@@ -348,7 +333,8 @@ Hooks.once("init", () => {
       action: "tamer-companion-manager",
       label: "Companions",
       icon: "fa-solid fa-paw",
-      ownership: "OWNER"
+      ownership: "OWNER",
+      onClick: () => TamerCompanionManager.open(actor)
     });
   };
 
@@ -358,20 +344,7 @@ Hooks.once("init", () => {
   // Specific ActorSheetV2 hook, when available.
   Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
 
-  // v14 header controls are action-driven. Intercept our action after the
-  // sheet renders so it opens the manager for this exact Actor.
-  Hooks.on("renderApplicationV2", (app, element) => {
-    if (!app?.actor || !TamerCompanionManager.isTamer(app.actor)) return;
-    const button = element.querySelector('[data-action="tamer-companion-manager"]');
-    if (!button || button.dataset.tamerCompanionBound === "true") return;
 
-    button.dataset.tamerCompanionBound = "true";
-    button.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      TamerCompanionManager.open(app.actor);
-    }, { capture: true });
-  });
 });
 
 globalThis.TamerCompanionManager = TamerCompanionManager;
