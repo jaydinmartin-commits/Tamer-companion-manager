@@ -166,7 +166,38 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static async _onOpenTamer() { await this.tamer.sheet?.render({ force: true }); }
 }
 
-Hooks.once("init", () => {
+class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(ApplicationV2) {
+  static DEFAULT_OPTIONS={id:"tamer-bespoke-improvements",window:{title:"Bespoke Companion Improvements",icon:"fa-solid fa-tree"},position:{width:720,height:620},actions:{addTree:this._onAddTree,saveTree:this._onSaveTree,editTree:this._onEditTree,removeTree:this._onRemoveTree,cancelEdit:this._onCancelEdit}};
+  static PARTS={main:{template:`modules/${MODULE_ID}/templates/improvement-registry.hbs`,root:true}};
+  constructor(options={}){super(options);this.editing=null;}
+  async _prepareContext(){return{trees:TamerCompanionManager.getImprovementRegistry(),editing:this.editing};}
+  static async _onAddTree(){this.editing={id:foundry.utils.randomID(),name:"",matchName:"",sources:[]};await this.render({force:true});}
+  static async _onEditTree(event,target){this.editing=TamerCompanionManager.getImprovementRegistry().find(t=>t.id===target.dataset.id)??null;if(this.editing)await this.render({force:true});}
+  static async _onCancelEdit(){this.editing=null;await this.render({force:true});}
+  static async _onSaveTree(event,target){
+    if(!this.editing)return;
+    const form=target.closest("form"),name=String(form?.elements?.name?.value??"").trim(),matchName=String(form?.elements?.matchName?.value??"").trim();
+    if(!name||!matchName)return ui.notifications.warn("Enter both a tree name and an exact companion name.");
+    const trees=TamerCompanionManager.getImprovementRegistry(),tree={...this.editing,name,matchName,updatedAt:Date.now()};
+    const i=trees.findIndex(t=>t.id===tree.id);if(i>=0)trees[i]=tree;else trees.push(tree);
+    await game.settings.set(MODULE_ID,"improvementTrees",trees);this.editing=null;await this.render({force:true});
+  }
+  static async _onRemoveTree(event,target){const trees=TamerCompanionManager.getImprovementRegistry().filter(t=>t.id!==target.dataset.id);await game.settings.set(MODULE_ID,"improvementTrees",trees);await this.render({force:true});}
+  async _onRender(context,options){
+    await super._onRender(context,options);if(!this.element)return;
+    const drop=new foundry.applications.ux.DragDrop({dragSelector:null,dropSelector:".tcm-tree-drop-zone",permissions:{drop:()=>Boolean(this.editing)},callbacks:{drop:async event=>{
+      event.preventDefault();if(!this.editing)return;
+      const data=TextEditor.getDragEventData(event);if(!["Item","Folder"].includes(data?.type))return ui.notifications.warn("Drop Monster Trainer Improvement Items or folders here.");
+      const doc=data.uuid?await fromUuid(data.uuid).catch(()=>null):null;if(!doc)return ui.notifications.error("The dropped document could not be resolved.");
+      if(doc.documentName==="Item"&&!TamerCompanionManager.isMonsterTrainerImprovement(doc))return ui.notifications.warn("That Item is not a Monster Trainer Improvement.");
+      this.editing.sources??=[];if(!this.editing.sources.some(x=>(x.uuid??x)===doc.uuid))this.editing.sources.push({uuid:doc.uuid,name:doc.name,type:doc.documentName});
+      await this.render({force:true});
+    }}});
+    drop.bind(this.element);
+  }
+}
+
+Hooks.once("init", () => {\n  game.settings.register(MODULE_ID, "improvementTrees", { scope: "world", config: false, type: Array, default: [] });\n  game.settings.registerMenu(MODULE_ID, "openImprovementRegistry", { name: "Bespoke Companion Improvements", label: "Register Improvements", hint: "Register additional improvement trees for bespoke companions.", icon: "fa-solid fa-tree", type: TamerCompanionImprovementRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openManager", { name: "Tamer Companion Manager", label: "Open Companion Manager", hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.", icon: "fa-solid fa-paw", type: TamerCompanionManager, restricted: false });
   game.tamerCompanionManager = { open: actor => TamerCompanionManager.open(actor), isTamer: actor => TamerCompanionManager.isTamer(actor), getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor), getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level) };
   const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
@@ -175,3 +206,5 @@ Hooks.once("init", () => {
 });
 
 globalThis.TamerCompanionManager = TamerCompanionManager;
+
+ globalThis.TamerCompanionImprovementRegistry = TamerCompanionImprovementRegistry;
