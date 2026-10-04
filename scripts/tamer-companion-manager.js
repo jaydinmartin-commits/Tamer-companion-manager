@@ -89,7 +89,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     await this.save(tamer,records); ui.notifications.info(`${source.name} added to ${actor.name}.`); return true;
   }
   static getProgression(record,actor,level) {
-    const chosen=(record?.improvements??[]).length,target=Math.max(0,level-1);
+    const chosen=(record?.improvements??[]).length,target=1+(level>=3?1:0)+(level>=5?1:0)+(level>=9?1:0)+(level>=13?1:0)+(level>=17?1:0);
     return {target,chosen,pending:Math.max(0,target-chosen),bonusHitDice:Number(record?.bonusHitDice??0),bespokeTree:null};
   }
   static async spendSoulBond(tamer, records, index, amount) {
