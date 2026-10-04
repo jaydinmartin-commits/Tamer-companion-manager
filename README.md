@@ -31,3 +31,7 @@ Vessel validation, Monster Trainer improvements, Soul Bond, bespoke progression,
 Foundry > Add-on Modules > Install Module > Manifest URL:
 
 `https://raw.githubusercontent.com/jaydinmartin-commits/Tamer-companion-manager/main/module.json`
+
+
+## Release 0.1.11
+- Stable GitHub release manifest for Foundry package updates.
