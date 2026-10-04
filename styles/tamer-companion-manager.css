@@ -31,3 +31,13 @@
 .tcm-tree-sources li button i{margin:0}
 .tcm-registry{gap:12px}
 .tcm-registry-card{gap:8px;padding:10px}
+
+/* v0.1.30 improvement button fit */
+.tcm-improvements{align-items:stretch}
+.tcm-improvements>div{flex:1 1 auto;min-width:0;justify-content:center}
+.tcm-improvements button{flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden}
+.tcm-improvements button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width: 520px){
+  .tcm-improvements{flex-direction:column}
+  .tcm-improvements button{width:100%;margin-left:0}
+}
