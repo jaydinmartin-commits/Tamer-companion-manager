@@ -75,32 +75,37 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static getImprovementDescription(item) {
     const raw = String(item?.system?.description?.value ?? "").trim();
     if (!raw) return "";
-    try { return foundry.utils.escapeHTML(TextEditor.enrichHTML ? raw.replace(/<[^>]*>/g, " ") : raw); }
-    catch { return foundry.utils.escapeHTML(raw.replace(/<[^>]*>/g, " ")); }
+    return raw.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\\s+/g, " ").trim();
   }
 
-  static getImprovementPrerequisites(item, actor, level, selectedSourceUuids) {
-    const advancement = item?.system?.advancement;
-    const prerequisites = [];
-    const levelText = String(item?.system?.prerequisite ?? item?.system?.prerequisites ?? "").trim();
-    if (levelText) prerequisites.push(levelText);
+  static parseImprovementPrerequisites(item) {
+    const text = this.getImprovementDescription(item);
+    const match = text.match(/Prerequisite\\s*:\\s*([^\\n.]+)/i);
+    if (!match) return { text: "", level: 0, names: [] };
+    const raw = match[1].replace(/<[^>]*>/g, " ").trim();
+    const levelMatch = raw.match(/(?:tamer\\s+)?(?:level\\s*)?(\\d+)(?:st|nd|rd|th)?-?level\\s+tamer/i)
+      ?? raw.match(/(\\d+)(?:st|nd|rd|th)-level\\s+tamer/i);
+    const level = levelMatch ? Number(levelMatch[1]) : 0;
+    const names = raw
+      .replace(/(?:\\d+)(?:st|nd|rd|th)-level\\s+tamer/ig, "")
+      .replace(/tamer\\s+level\\s+\\d+/ig, "")
+      .split(/,|\\band\\b/i)
+      .map(x => x.trim())
+      .filter(x => x && !/^—$/.test(x) && !/^become(?: a)? tamer(?:’s|')? companion$/i.test(x));
+    return { text: raw, level, names };
+  }
 
-    const sourcePrereqs = item?.flags?.[MODULE_ID]?.prerequisites ?? item?.flags?.dnd5e?.prerequisites;
-    if (Array.isArray(sourcePrereqs)) prerequisites.push(...sourcePrereqs.map(String));
-
-    const configuredLevel = Number(item?.flags?.[MODULE_ID]?.prerequisiteLevel ?? 0);
-    if (configuredLevel && level < configuredLevel) prerequisites.push(`Tamer level ${configuredLevel} required`);
-
-    const requiredItems = item?.flags?.[MODULE_ID]?.requiresImprovements ?? [];
-    for (const uuid of requiredItems) {
-      if (!selectedSourceUuids.has(String(uuid))) {
-        const req = fromUuid ? null : null;
-        prerequisites.push("Requires another improvement");
-        break;
-      }
+  static getImprovementEligibility(item, actor, level, selectedSourceUuids, optionsByName) {
+    const prereq = this.parseImprovementPrerequisites(item);
+    const missing = [];
+    if (prereq.level && level < prereq.level) missing.push(`Tamer level ${prereq.level}`);
+    for (const name of prereq.names) {
+      const normalized = name.toLowerCase().replace(/[’']/g, "'").trim();
+      if (!normalized) continue;
+      const matching = [...optionsByName.entries()].find(([candidateName]) => candidateName === normalized);
+      if (!matching || !selectedSourceUuids.has(matching[1])) missing.push(name);
     }
-
-    return prerequisites;
+    return { eligible: missing.length === 0, prerequisite: prereq.text, missing };
   }
 
   static async manageImprovements(tamer, record, actor) {
