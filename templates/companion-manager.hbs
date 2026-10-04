@@ -24,6 +24,12 @@
     <span>Companions remain normal Foundry Actors. Normally only one companion is summoned at a time.</span>
   </div>
 
+  <div class="tcm-soul-bond">
+    <span><i class="fa-solid fa-heart-pulse"></i> Soul Bond</span>
+    <strong>{{soulBond.current}} / {{soulBond.max}}</strong>
+    <small>Healing remaining. Soul Bond is offered automatically when you finish a Short Rest.</small>
+  </div>
+
   <div class="tcm-companion-grid">
     {{#each companions}}
       <article class="tcm-card {{#if summoned}}is-summoned{{/if}}">
@@ -97,6 +103,6 @@
 
   <footer class="tcm-footer">
     <span><i class="fa-solid fa-database"></i> Relationship data is stored on the Tamer Actor.</span>
-    <span>V0.1.26</span>
+    <span>V0.1.28</span>
   </footer>
 </section>
