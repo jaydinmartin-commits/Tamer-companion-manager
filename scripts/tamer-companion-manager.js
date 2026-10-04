@@ -328,7 +328,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 }
 
 class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(ApplicationV2) {
-  static DEFAULT_OPTIONS={id:"tamer-bespoke-improvements",window:{title:"Bespoke Companion Improvements",icon:"fa-solid fa-tree"},position:{width:720,height:620},actions:{addTree:this._onAddTree,saveTree:this._onSaveTree,editTree:this._onEditTree,removeTree:this._onRemoveTree,cancelEdit:this._onCancelEdit}};
+  static DEFAULT_OPTIONS={id:"tamer-bespoke-improvements",window:{title:"Bespoke Companion Improvements",icon:"fa-solid fa-tree"},position:{width:720,height:620},actions:{addTree:this._onAddTree,saveTree:this._onSaveTree,editTree:this._onEditTree,removeTree:this._onRemoveTree,cancelEdit:this._onCancelEdit,removeStandardSource:this._onRemoveStandardSource,removeTreeSource:this._onRemoveTreeSource}};
   static PARTS={main:{template:`modules/${MODULE_ID}/templates/improvement-registry.hbs`,root:true}};
   constructor(options={}){super(options);this.editing=null;}
   async _prepareContext(){return{trees:TamerCompanionManager.getImprovementRegistry(),standardSources:TamerCompanionManager.getStandardImprovementSources(),editing:this.editing};}
@@ -344,6 +344,19 @@ class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(Appli
     await game.settings.set(MODULE_ID,"improvementTrees",trees);this.editing=null;await this.render({force:true});
   }
   static async _onRemoveTree(event,target){const trees=TamerCompanionManager.getImprovementRegistry().filter(t=>t.id!==target.dataset.id);await game.settings.set(MODULE_ID,"improvementTrees",trees);await this.render({force:true});}
+  static async _onRemoveStandardSource(event,target){
+    const uuid=target.dataset.uuid;
+    if(!uuid)return;
+    const sources=TamerCompanionManager.getStandardImprovementSources().filter(x=>(x.uuid??x)!==uuid);
+    await game.settings.set(MODULE_ID,"standardImprovementSources",sources);
+    await this.render({force:true});
+  }
+  static async _onRemoveTreeSource(event,target){
+    const uuid=target.dataset.uuid;
+    if(!uuid||!this.editing)return;
+    this.editing.sources=(this.editing.sources??[]).filter(x=>(x.uuid??x)!==uuid);
+    await this.render({force:true});
+  }
   async _onRender(context,options){
     await super._onRender(context,options);if(!this.element)return;
     const drop=new foundry.applications.ux.DragDrop({dragSelector:null,dropSelector:".tcm-tree-drop-zone, .tcm-standard-drop-zone",permissions:{drop:()=>true},callbacks:{drop:async event=>{
