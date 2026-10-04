@@ -98,20 +98,65 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static parseImprovementPrerequisites(item) {
     const flags = item?.flags?.[MODULE_ID] ?? {};
     const system = item?.system ?? {};
-    const structuredLevel = Number(flags.minimumTamerLevel ?? system.minimumTamerLevel ?? system.prerequisites?.minimumTamerLevel ?? system.requirements?.minimumTamerLevel ?? 0);
+
+    // Prefer explicit prerequisite data when the source Item provides it.
+    const structuredLevel = Number(
+      flags.minimumTamerLevel ??
+      system.minimumTamerLevel ??
+      system.prerequisites?.minimumTamerLevel ??
+      system.requirements?.minimumTamerLevel ??
+      0
+    );
+
     const structuredNames = [
       ...(Array.isArray(flags.prerequisiteImprovements) ? flags.prerequisiteImprovements : []),
       ...(Array.isArray(system.prerequisites?.improvements) ? system.prerequisites.improvements : []),
       ...(Array.isArray(system.requirements?.improvements) ? system.requirements.improvements : [])
-    ].map(x => String(x?.name ?? x?.label ?? x ?? "").trim()).filter(Boolean);
-    if (structuredLevel > 0 || structuredNames.length) return { text: [structuredLevel > 0 ? "Tamer level " + structuredLevel : "", structuredNames.join(", ")].filter(Boolean).join(", "), level: structuredLevel > 0 ? structuredLevel : 0, names: structuredNames };
+    ]
+      .map(x => String(x?.name ?? x?.label ?? x ?? "").trim())
+      .filter(Boolean);
+
+    if (structuredLevel > 0 || structuredNames.length) {
+      return {
+        text: [
+          structuredLevel > 0 ? `Tamer level ${structuredLevel}` : "",
+          structuredNames.join(", ")
+        ].filter(Boolean).join(", "),
+        level: structuredLevel > 0 ? structuredLevel : 0,
+        names: structuredNames
+      };
+    }
+
+    // The Heliana/Tamer Items store prerequisites in their description text,
+    // e.g. "Prerequisite: 5th-level tamer, Growth I".
     const text = this.getImprovementDescription(item);
-    const match = text.match(/Prerequisite\\s*:\\s*([^\\.\\n]+)/i);
+    const match = text.match(/Prerequisite\\s*:\\s*([^\\n.]+)/i);
     if (!match) return { text: "", level: 0, names: [] };
+
     const raw = match[1].trim();
-    const levelMatch = raw.match(/(?:(?:tamer\\s+)?level\\s+)?(\\d+)(?:st|nd|rd|th)?-?level\\s+tamer/i);
+
+    // Accept the source's normal forms:
+    //   5th-level tamer
+    //   9th-level tamer
+    //   tamer level 9
+    // and tolerate HTML/text normalization that leaves spaces around the hyphen.
+    const levelMatch =
+      raw.match(/(\\d+)\\s*(?:st|nd|rd|th)?\\s*-?\\s*level\\s+tamer/i) ??
+      raw.match(/tamer\\s+level\\s+(\\d+)/i);
+
     const level = levelMatch ? Number(levelMatch[1]) : 0;
-    const names = raw.replace(/(?:(?:tamer\\s+)?level\\s+)?\\d+(?:st|nd|rd|th)?-?level\\s+tamer/ig, "").replace(/tamer\\s+level\\s+\\d+/ig, "").split(/,|\\band\\b/i).map(x => x.trim()).filter(x => x && !/^—$/.test(x) && !/^become(?: a)? tamer(?:’s|')? companion$/i.test(x));
+
+    const names = raw
+      .replace(/\\d+\\s*(?:st|nd|rd|th)?\\s*-?\\s*level\\s+tamer/ig, "")
+      .replace(/tamer\\s+level\\s+\\d+/ig, "")
+      .split(/,|\\band\\b/i)
+      .map(x => x.trim())
+      .filter(x =>
+        x &&
+        !/^—$/.test(x) &&
+        !/^become(?: a)? tamer(?:’s|')? companion$/i.test(x)
+      );
+
     return { text: raw, level, names };
   }
 
