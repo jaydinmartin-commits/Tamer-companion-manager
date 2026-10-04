@@ -84,3 +84,5 @@ jobs:
             "dist/tamer-companion-manager-v${VERSION}.zip" \
             module.json \
             --clobber
+
+# v0.1.42 release packaging trigger
