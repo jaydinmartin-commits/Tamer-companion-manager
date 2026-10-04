@@ -68,4 +68,5 @@ jobs:
           VERSION="${{ steps.release.outputs.version }}"
           gh release upload "$TAG" \
             "dist/tamer-companion-manager-v${VERSION}.zip" \
+            module.json \
             --clobber
