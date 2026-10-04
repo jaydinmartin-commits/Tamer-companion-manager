@@ -158,6 +158,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       return false;
     }
 
+    // Ensure Foundry's Token layer owns the canvas interaction while the
+    // native placement workflow is running. Restore the previous layer after.
+    const previousLayer = canvas.activeLayer;
+    if (canvas.tokens !== previousLayer) canvas.tokens.activate();
+
     const grid = canvas.grid;
     const tamerCenter = tamerToken.center;
     const range = 30;
@@ -192,8 +197,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
     if (!placed.length) {
       ui.notifications.info("Summoning cancelled.");
+      if (previousLayer && previousLayer !== canvas.tokens) previousLayer.activate();
       return false;
     }
+
+    if (previousLayer && previousLayer !== canvas.tokens) previousLayer.activate();
 
     const recordsAfterPlacement = this.records(tamer);
     const target = recordsAfterPlacement.find(r => r.id === record.id);
