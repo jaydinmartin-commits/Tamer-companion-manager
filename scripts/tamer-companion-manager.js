@@ -27,7 +27,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static getTamerLevel(actor) { const cls = actor?.items?.find(item => item.type === "class" && (String(item.name ?? "").trim().toLowerCase() === "tamer" || String(item.system?.identifier ?? "").trim().toLowerCase() === "tamer")); const classLevel = Number(cls?.system?.levels ?? cls?.system?.level ?? 0); return classLevel > 0 ? classLevel : Number(actor?.system?.details?.level ?? 0); }
   static getPocketFamilySlots(level) { if (level >= 19) return 5; if (level >= 15) return 4; if (level >= 11) return 3; if (level >= 3) return 2; if (level >= 1) return 1; return 0; }
 
-  static getMaxCompanionSize(level) { if (level >= 17) return "Huge"; if (level >= 11) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
+  static getMaxCompanionSize(level) { if (level >= 13) return "Huge"; if (level >= 9) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
   static getMaxCompanionCR(level) { if (level >= 19) return 6; if (level >= 16) return 5; if (level >= 13) return 4; if (level >= 10) return 3; if (level >= 7) return 2; if (level >= 4) return 1; return 0.5; }
   static getActorCR(actor) {
     const raw = actor?.system?.details?.cr;
@@ -83,8 +83,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       .filter(e=>{if(owned.has(e.item.uuid)||seen.has(e.item.uuid))return false;seen.add(e.item.uuid);return true;});
   }
   static async chooseImprovement(tamer,record,actor) {
-    const progression=this.getProgression(record,actor,this.getTamerLevel(tamer));
-    if(progression.pending<=0)return ui.notifications.info(`${actor.name} has no improvement choices pending at this Tamer level.`);
     const progression = this.getProgression(record, actor, this.getTamerLevel(tamer));
     if (progression.pending <= 0) return ui.notifications.info(`${actor.name} has no improvement choices pending at this Tamer level.`);
     const options=await this.getAvailableImprovements(actor,record);
