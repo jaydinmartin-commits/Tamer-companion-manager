@@ -1,0 +1,41 @@
+name: Package Foundry Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to package (for example, v0.1.0)
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Foundry package ZIP
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          VERSION="${TAG#v}"
+          mkdir -p dist
+          zip -r "dist/tamer-companion-manager-v${VERSION}.zip" \
+            module.json scripts templates styles macros README.md
+
+      - name: Upload package to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          VERSION="${TAG#v}"
+          gh release upload "${TAG}" \
+            "dist/tamer-companion-manager-v${VERSION}.zip" \
+            --clobber
