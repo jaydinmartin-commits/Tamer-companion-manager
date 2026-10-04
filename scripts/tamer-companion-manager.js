@@ -191,7 +191,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static open(actor) {
-    if (!actor) return ui.notifications.warn("No Actor was provided.");
+    actor ??= game.actors.contents.find(a => this.isTamer(a) && (a.isOwner || game.user.isGM));
+    if (!actor) return ui.notifications.warn("No Tamer Actor was found. Create a character with the Tamer class first.");
     if (!this.isTamer(actor)) return ui.notifications.warn("This Actor does not have a Tamer class.");
     if (!(actor.isOwner || game.user.isGM)) return ui.notifications.warn("You do not have permission.");
     return new TamerCompanionManager(actor).render({ force: true });
@@ -296,6 +297,15 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 }
 
 Hooks.once("init", () => {
+  game.settings.registerMenu(MODULE_ID, "openManager", {
+    name: "Tamer Companion Manager",
+    label: "Open Companion Manager",
+    hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.",
+    icon: "fa-solid fa-paw",
+    type: TamerCompanionManager,
+    restricted: false
+  });
+
   game.tamerCompanionManager = {
     open: actor => TamerCompanionManager.open(actor),
     isTamer: actor => TamerCompanionManager.isTamer(actor),
