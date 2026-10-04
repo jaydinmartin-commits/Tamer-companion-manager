@@ -72,6 +72,37 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     return [...standard.map(item=>({item,tree:"Monster Trainer Improvements"})),...bespoke.map(item=>({item,tree:tree.name}))]
       .filter(e=>{if(owned.has(e.item.uuid)||seen.has(e.item.uuid))return false;seen.add(e.item.uuid);return true;});
   }
+  static getImprovementDescription(item) {
+    const raw = String(item?.system?.description?.value ?? "").trim();
+    if (!raw) return "";
+    try { return foundry.utils.escapeHTML(TextEditor.enrichHTML ? raw.replace(/<[^>]*>/g, " ") : raw); }
+    catch { return foundry.utils.escapeHTML(raw.replace(/<[^>]*>/g, " ")); }
+  }
+
+  static getImprovementPrerequisites(item, actor, level, selectedSourceUuids) {
+    const advancement = item?.system?.advancement;
+    const prerequisites = [];
+    const levelText = String(item?.system?.prerequisite ?? item?.system?.prerequisites ?? "").trim();
+    if (levelText) prerequisites.push(levelText);
+
+    const sourcePrereqs = item?.flags?.[MODULE_ID]?.prerequisites ?? item?.flags?.dnd5e?.prerequisites;
+    if (Array.isArray(sourcePrereqs)) prerequisites.push(...sourcePrereqs.map(String));
+
+    const configuredLevel = Number(item?.flags?.[MODULE_ID]?.prerequisiteLevel ?? 0);
+    if (configuredLevel && level < configuredLevel) prerequisites.push(`Tamer level ${configuredLevel} required`);
+
+    const requiredItems = item?.flags?.[MODULE_ID]?.requiresImprovements ?? [];
+    for (const uuid of requiredItems) {
+      if (!selectedSourceUuids.has(String(uuid))) {
+        const req = fromUuid ? null : null;
+        prerequisites.push("Requires another improvement");
+        break;
+      }
+    }
+
+    return prerequisites;
+  }
+
   static async manageImprovements(tamer, record, actor) {
     const level = this.getTamerLevel(tamer);
     const progression = this.getProgression(record, actor, level);
@@ -79,7 +110,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const tree = await this.findBespokeTree(actor);
     const bespoke = tree ? await this.resolveTreeItems(tree) : [];
     const sources = new Map();
-
     for (const item of standard) sources.set(item.uuid, { item, tree: "Monster Trainer Improvements" });
     for (const item of bespoke) sources.set(item.uuid, { item, tree: tree.name });
 
@@ -90,7 +120,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const item = entry.itemUuid ? await fromUuid(entry.itemUuid).catch(() => null) : null;
       if (item) options.push({ item, tree: "Selected Improvement" });
     }
-
     if (!options.length) return ui.notifications.info(`${actor.name} has no registered improvement Items available.`);
 
     const groups = new Map();
@@ -99,31 +128,38 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       groups.get(entry.tree).push(entry);
     }
 
-    const checked = uuid => selected.has(uuid) ? " checked" : "";
+    const esc = value => foundry.utils.escapeHTML(String(value ?? ""));
+    const selectedUuids = new Set(selected.keys());
     const groupHtml = [...groups.entries()].map(([treeName, entries]) => `
       <section class="tcm-advancement-group">
-        <h3>${foundry.utils.escapeHTML(treeName)}</h3>
+        <h3>${esc(treeName)}</h3>
         <div class="tcm-advancement-options">
-          ${entries.sort((a,b) => a.item.name.localeCompare(b.item.name)).map(({item}) => `
-            <label class="tcm-advancement-option">
-              <input type="checkbox" name="improvement" value="${foundry.utils.escapeHTML(item.uuid)}"${checked(item.uuid)}>
-              <span class="tcm-advancement-check"></span>
-              <span class="tcm-advancement-text">
-                <strong>${foundry.utils.escapeHTML(item.name)}</strong>
-                <small>${foundry.utils.escapeHTML(item.system?.description?.value ? foundry.utils.textToHTML?.(item.system.description.value) ?? "" : "")}</small>
-              </span>
-            </label>
-          `).join("")}
+          ${entries.sort((a,b) => a.item.name.localeCompare(b.item.name)).map(({item}) => {
+            const uuid = item.uuid;
+            const description = this.getImprovementDescription(item);
+            const prerequisites = this.getImprovementPrerequisites(item, actor, level, selectedUuids);
+            const locked = !selected.has(uuid) && prerequisites.length > 0;
+            return `
+              <label class="tcm-advancement-option${locked ? " is-locked" : ""}" title="${esc(description || item.name)}">
+                <input type="checkbox" name="improvement" value="${esc(uuid)}"${selected.has(uuid) ? " checked" : ""}${locked ? " disabled" : ""}>
+                <span class="tcm-advancement-check"></span>
+                <img class="tcm-advancement-icon" src="${esc(item.img || "icons/svg/item-bag.svg")}" alt="">
+                <span class="tcm-advancement-text">
+                  <strong>${esc(item.name)}</strong>
+                  ${description ? `<small>${esc(description)}</small>` : ""}
+                  ${prerequisites.length ? `<em class="tcm-improvement-prerequisite">${esc(prerequisites.join("; "))}</em>` : ""}
+                </span>
+              </label>`;
+          }).join("")}
         </div>
-      </section>
-    `).join("");
+      </section>`).join("");
 
     const content = `
       <div class="tcm-advancement">
         <div class="tcm-advancement-header">
           <div>
-            <h2>Monster Trainer Improvements</h2>
-            <p>Choose up to <strong>${progression.target}</strong> improvement${progression.target === 1 ? "" : "s"}. Checked improvements are currently applied to this companion. You can remove or replace them later.</p>
+            <h2>Choose Improvement</h2>
+            <p>Choose up to <strong>${progression.target}</strong> improvement${progression.target === 1 ? "" : "s"}. Hover over an improvement for its full description. Locked improvements show their prerequisites.</p>
           </div>
           <div class="tcm-advancement-count"><strong class="tcm-selected-count">${selected.size}</strong> / ${progression.target}</div>
         </div>
@@ -131,43 +167,39 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       </div>`;
 
     const result = await foundry.applications.api.DialogV2.wait({
-      window: { title: `Manage Improvements — ${actor.name}`, resizable: true },
-      position: { width: 720, height: 650 },
+      window: { title: `Choose Improvement — ${actor.name}`, resizable: true },
+      position: { width: 760, height: 680 },
       content,
       buttons: [
-        {
-          action: "save",
-          label: "Save Changes",
-          default: true,
-          callback: (event, button) => {
-            const values = [...button.form.querySelectorAll('input[name="improvement"]:checked')].map(input => input.value);
-            if (values.length > progression.target) {
-              ui.notifications.warn(`This companion can have at most ${progression.target} selected improvement${progression.target === 1 ? "" : "s"} at Tamer level ${level}.`);
-              return null;
-            }
-            return values;
+        { action: "save", label: "Save Changes", default: true, callback: (event, button) => {
+          const values = [...button.form.querySelectorAll('input[name="improvement"]:checked')].map(input => input.value);
+          if (values.length > progression.target) {
+            ui.notifications.warn(`This companion can have at most ${progression.target} selected improvement${progression.target === 1 ? "" : "s"}.`);
+            return null;
           }
-        },
+          return values;
+        }},
         { action: "cancel", label: "Cancel" }
       ],
-      render: (dialog) => {
+      render: dialog => {
         const root = dialog.element;
         const boxes = [...root.querySelectorAll('input[name="improvement"]')];
         const count = root.querySelector(".tcm-selected-count");
         const updateCount = () => {
           const n = boxes.filter(input => input.checked).length;
           if (count) count.textContent = n;
-          for (const input of boxes) {
-            input.disabled = !input.checked && n >= progression.target;
-          }
+          for (const input of boxes) input.disabled = input.dataset.locked === "true" || (!input.checked && n >= progression.target);
         };
-        for (const input of boxes) input.addEventListener("change", updateCount);
+        for (const input of boxes) {
+          const option = input.closest(".tcm-advancement-option");
+          if (option?.classList.contains("is-locked")) input.dataset.locked = "true";
+          input.addEventListener("change", updateCount);
+        }
         updateCount();
       }
     });
 
     if (!Array.isArray(result)) return false;
-
     const desired = new Set(result);
     const current = new Map((record?.improvements ?? []).map(entry => [String(entry.sourceUuid ?? ""), entry]));
     const records = this.records(tamer);
@@ -181,7 +213,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!removed) return false;
       target.improvements = target.improvements.filter(x => String(x.sourceUuid ?? "") !== sourceUuid);
     }
-
     for (const sourceUuid of desired) {
       if (current.has(sourceUuid)) continue;
       const source = await fromUuid(sourceUuid).catch(() => null);
@@ -189,21 +220,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         ui.notifications.warn(`Could not resolve improvement ${sourceUuid}; it was not added.`);
         continue;
       }
-
-      const data = source.toObject();
-      delete data._id;
+      const data = source.toObject(); delete data._id;
       const added = await this.addImprovementItem(actor, data, source.uuid);
       if (!added) return false;
-
-      target.improvements.push({
-        itemUuid: added.uuid,
-        itemId: added.id,
-        sourceUuid: source.uuid,
-        name: added.name,
-        assignedAtLevel: level
-      });
+      target.improvements.push({ itemUuid: added.uuid, itemId: added.id, sourceUuid: source.uuid, name: added.name, assignedAtLevel: level });
     }
-
     await this.save(tamer, records);
     ui.notifications.info(`${actor.name}'s improvements were updated.`);
     return true;
