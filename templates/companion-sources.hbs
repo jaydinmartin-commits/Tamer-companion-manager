@@ -1,0 +1,33 @@
+<form class="tcm-source-registry">
+  <header class="tcm-source-registry-header">
+    <div>
+      <h2>Companion Sources</h2>
+      <p>Select the Actor compendiums that players can browse from <strong>Add Companion</strong>.</p>
+    </div>
+    <strong>{{selectedCount}} selected</strong>
+  </header>
+
+  <div class="tcm-source-registry-list">
+    {{#each packs}}
+      <label class="tcm-source-pack {{#unless visible}}is-hidden-source{{/unless}}">
+        <input type="checkbox" name="companionSourcePack" value="{{collection}}" {{#if selected}}checked{{/if}}>
+        <span class="tcm-source-pack-check"></span>
+        <span class="tcm-source-pack-text">
+          <strong>{{title}}</strong>
+          {{#if packageName}}<small>{{packageName}}</small>{{/if}}
+          <em>{{collection}}{{#unless visible}} · hidden from players{{/unless}}</em>
+        </span>
+      </label>
+    {{else}}
+      <div class="tcm-source-registry-empty">No Actor compendiums are currently available.</div>
+    {{/each}}
+  </div>
+
+  <footer class="tcm-source-registry-footer">
+    <span>Only Actor compendiums are listed. Foundry permissions still apply to players.</span>
+    <div>
+      <button type="button" data-action="save" class="primary">Save Sources</button>
+      <button type="button" data-action="close">Cancel</button>
+    </div>
+  </footer>
+</form>
