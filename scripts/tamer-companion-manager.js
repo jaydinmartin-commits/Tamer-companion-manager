@@ -130,7 +130,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     // The Heliana/Tamer Items store prerequisites in their description text,
     // e.g. "Prerequisite: 5th-level tamer, Growth I".
     const text = this.getImprovementDescription(item);
-    const match = text.match(/Prerequisite\\s*:\\s*([^\\n.]+)/i);
+    const match = text.match(/Prerequisite\s*:\s*([^\n.]+)/i);
     if (!match) return { text: "", level: 0, names: [] };
 
     const raw = match[1].trim();
@@ -142,13 +142,13 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     // and tolerate HTML/text normalization that leaves spaces around the hyphen.
     const levelMatch =
       raw.match(/(\\d+)\\s*(?:st|nd|rd|th)?\\s*-?\\s*level\\s+tamer/i) ??
-      raw.match(/tamer\\s+level\\s+(\\d+)/i);
+      raw.match(/tamer\s+level\s+(\d+)/i);
 
     const level = levelMatch ? Number(levelMatch[1]) : 0;
 
     const names = raw
       .replace(/\\d+\\s*(?:st|nd|rd|th)?\\s*-?\\s*level\\s+tamer/ig, "")
-      .replace(/tamer\\s+level\\s+\\d+/ig, "")
+      .replace(/tamer\s+level\s+\d+/ig, "")
       .split(/,|\\band\\b/i)
       .map(x => x.trim())
       .filter(x =>
