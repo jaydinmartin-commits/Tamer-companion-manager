@@ -305,11 +305,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this.element) this._tcmDragDrop.bind(this.element);
   }
 
-  async _onRefresh() {
+  static async _onRefresh() {
     await this.render({ force: true });
   }
 
-  async _onAddCompanion() {
+  static async _onAddCompanion() {
     const records = TamerCompanionManager.records(this.tamer);
     const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
 
@@ -355,23 +355,23 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     await this._linkCompanion(actor);
   }
 
-  async _onOpenCompanion(event, target) {
+  static async _onOpenCompanion(event, target) {
     const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)];
     const actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
     actor?.sheet?.render({ force: true });
   }
 
-  async _onSummonCompanion(event, target) {
+  static async _onSummonCompanion(event, target) {
     const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)];
     if (record && await TamerCompanionManager.summon(this.tamer, record)) await this.render({ force: true });
   }
 
-  async _onDismissCompanion(event, target) {
+  static async _onDismissCompanion(event, target) {
     const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)];
     if (record && await TamerCompanionManager.dismiss(this.tamer, record)) await this.render({ force: true });
   }
 
-  async _onUnlinkCompanion(event, target) {
+  static async _onUnlinkCompanion(event, target) {
     const records = TamerCompanionManager.records(this.tamer);
     const record = records[Number(target.dataset.index)];
     if (!record) return;
@@ -394,7 +394,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     await this.render({ force: true });
   }
 
-  async _onOpenTamer() {
+  static async _onOpenTamer() {
     await this.tamer.sheet?.render({ force: true });
   }
 }
