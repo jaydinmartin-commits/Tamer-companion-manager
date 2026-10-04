@@ -25,9 +25,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static async save(actor, records) { await actor.setFlag(MODULE_ID, FLAG_KEY, records); }
   static isTamer(actor) { return Boolean(actor?.items?.some(item => item.type === "class" && (String(item.name ?? "").trim().toLowerCase() === "tamer" || String(item.system?.identifier ?? "").trim().toLowerCase() === "tamer"))); }
   static getTamerLevel(actor) { const cls = actor?.items?.find(item => item.type === "class" && (String(item.name ?? "").trim().toLowerCase() === "tamer" || String(item.system?.identifier ?? "").trim().toLowerCase() === "tamer")); const classLevel = Number(cls?.system?.levels ?? cls?.system?.level ?? 0); return classLevel > 0 ? classLevel : Number(actor?.system?.details?.level ?? 0); }
-  static getPocketFamilySlots(level) { if (level >= 19) return 6; if (level >= 15) return 5; if (level >= 11) return 4; if (level >= 7) return 3; if (level >= 3) return 2; if (level >= 1) return 1; return 0; }
+  static getPocketFamilySlots(level) { if (level >= 19) return 5; if (level >= 15) return 4; if (level >= 11) return 3; if (level >= 3) return 2; if (level >= 1) return 1; return 0; }
 
-  static getMaxCompanionSize(level) { if (level >= 17) return "Huge"; if (level >= 11) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
+  static getMaxCompanionSize(level) { if (level >= 17) return "Huge"; if (level >= 10) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
   static getMaxCompanionCR(level) { if (level >= 19) return 6; if (level >= 16) return 5; if (level >= 13) return 4; if (level >= 10) return 3; if (level >= 7) return 2; if (level >= 4) return 1; return 0.5; }
   static getActorCR(actor) {
     const raw = actor?.system?.details?.cr;
@@ -49,16 +49,14 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if (value <= 5) return 16;
     return 19;
   }
-  static getStandardImprovementCount(level) { return Math.max(0, Number(level) - 1); }
-  static getStandardTrainingHitDice(level) { return [4, 8, 12, 16, 19].filter(l => Number(level) >= l).length; }
-  static getBespokeResilienceHitDice(level) { return [3, 5, 11, 17].filter(l => Number(level) >= l).length; }
   static getTamingProgression(level, cr) {
     const unlock = this.getCRUnlockLevel(cr);
     if (Number(level) < unlock) return { improvements: 0, hitDice: 0 };
-    const improvementCount = Number(level) - unlock;
-    const asiBeforeUnlock = [4, 8, 12, 16, 19].filter(l => l < unlock).length;
-    const hitDice = Math.max(0, this.getStandardTrainingHitDice(level) - asiBeforeUnlock);
-    return { improvements: improvementCount, hitDice };
+    return { improvements: Number(level) - unlock, hitDice: this.getTamingHitDice(level, cr) };
+  }
+  static getTamingHitDice(level, cr) {
+    const unlock = this.getCRUnlockLevel(cr);
+    return Math.max(0, Math.floor((Number(level) - unlock) / 4) + (Number(level) >= unlock ? 0 : 0));
   }
   static getStandardImprovementSources() { return foundry.utils.deepClone(game.settings.get(MODULE_ID, "standardImprovementSources") ?? []); }
   static async getStandardImprovementItems() { return this.resolveSources(this.getStandardImprovementSources()); }
