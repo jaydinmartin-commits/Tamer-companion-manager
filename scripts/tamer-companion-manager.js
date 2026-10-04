@@ -692,6 +692,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       for(const source of bespoke){
         const prereq=TamerCompanionManager.parseImprovementPrerequisites(source);
         if(!prereq.freeOnTaming) continue;
+        if(TamerCompanionManager.actorHasImprovement(actor,source.name)) continue;
         const data=source.toObject();
         delete data._id;
         const added=await TamerCompanionManager.addImprovementItem(actor,data,source.uuid);
