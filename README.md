@@ -46,3 +46,6 @@ Foundry > Add-on Modules > Install Module > Manifest URL:
 
 
 <!-- release-package: v0.1.27 -->
+
+
+[release-package]
