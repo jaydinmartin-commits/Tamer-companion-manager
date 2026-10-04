@@ -778,7 +778,13 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!result?.tamerUuid) return null;
     return await fromUuid(result.tamerUuid).catch(() => null);
   }
-  static async _onAddCompanion() { const records = TamerCompanionManager.records(this.tamer), max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer)); if (records.length >= max) return ui.notifications.warn("No Pocket Family slot is available."); const available = game.actors.contents.filter(a => a.id !== this.tamer.id && (a.isOwner || game.user.isGM)).filter(a => !records.some(r => r.actorUuid === a.uuid)).sort((a,b) => a.name.localeCompare(b.name)); if (!available.length) return ui.notifications.warn("No available Actors were found."); const options = available.map(a => `<option value="${foundry.utils.escapeHTML(a.uuid)}">${foundry.utils.escapeHTML(a.name)}</option>`).join(""); const result = await foundry.applications.api.DialogV2.input({ window: { title: "Link Companion" }, content: `<div class="form-group"><label for="tcm-companion-actor">Companion Actor</label><select id="tcm-companion-actor" name="actorUuid">${options}</select></div>`, ok: { label: "Link Companion" } }); if (!result?.actorUuid) return; const actor = await fromUuid(result.actorUuid).catch(() => null); if (!actor) return ui.notifications.error("Could not resolve that Actor."); await this._linkCompanion(actor); }
+  static async _onAddCompanion() {
+    const records = TamerCompanionManager.records(this.tamer);
+    const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
+    if (records.length >= max) return ui.notifications.warn("No Pocket Family slot is available.");
+    const browser = new TamerCompanionBrowser({ tamer: this.tamer, manager: this });
+    await browser.render({ force: true });
+  }
   static async _onOpenCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)], actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; actor?.sheet?.render({ force: true }); }
 
   static async _onSummonCompanion(event, target) {
@@ -802,6 +808,149 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static async _onDismissCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)]; if (record && await TamerCompanionManager.dismiss(this.tamer, record)) await this.render({ force: true }); }
   static async _onUnlinkCompanion(event, target) { const records = TamerCompanionManager.records(this.tamer), record = records[Number(target.dataset.index)]; if (!record) return; const yes = await foundry.applications.api.DialogV2.confirm({ window: { title: "Unlink Companion" }, content: `<p>Unlink <strong>${foundry.utils.escapeHTML(record.name ?? "this companion")}</strong>?</p>`, yes: { label: "Unlink" }, no: { label: "Cancel" } }); if (!yes) return; if (record.tokenUuid) { const token = await fromUuid(record.tokenUuid).catch(() => null); if (token) await token.delete(); } records.splice(Number(target.dataset.index), 1); await TamerCompanionManager.save(this.tamer, records); await this.render({ force: true }); }
   static async _onOpenTamer() { await this.tamer.sheet?.render({ force: true }); }
+}
+
+
+
+class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
+  static DEFAULT_OPTIONS = {
+    id: "tcm-companion-browser",
+    classes: ["tcm-companion-browser"],
+    window: { title: "Choose Companion", icon: "fa-solid fa-paw", resizable: true },
+    position: { width: 820, height: 680 },
+    actions: { selectCompanion: this._onSelectCompanion, refresh: this._onRefresh }
+  };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/companion-browser.hbs`, root: true } };
+
+  constructor(options = {}) {
+    super(options);
+    this.tamer = options.tamer ?? null;
+    this.manager = options.manager ?? null;
+    this.source = options.source ?? "all";
+  }
+
+  static getConfiguredPacks() {
+    const configured = foundry.utils.deepClone(game.settings.get(MODULE_ID, "companionSourcePacks") ?? []);
+    return configured.map(collection => game.packs.get(String(collection)))
+      .filter(pack => pack?.documentName === "Actor")
+      .filter(pack => game.user.isGM || pack.visible)
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  async _prepareContext() {
+    const packs = TamerCompanionBrowser.getConfiguredPacks();
+    if (!packs.length) return { packs: [], selectedSource: "all", entries: [] };
+    if (this.source !== "all" && !packs.some(pack => pack.collection === this.source)) this.source = "all";
+
+    const selectedPacks = this.source === "all" ? packs : packs.filter(pack => pack.collection === this.source);
+    const entries = [];
+    for (const pack of selectedPacks) {
+      try {
+        const index = await pack.getIndex({ fields: ["name", "img", "type"] });
+        for (const entry of index.values()) {
+          entries.push({
+            id: entry._id,
+            name: entry.name ?? "Unnamed Actor",
+            img: entry.img ?? "icons/svg/mystery-man.svg",
+            type: entry.type ?? "",
+            source: pack.collection,
+            sourceTitle: pack.title
+          });
+        }
+      } catch (error) {
+        console.warn("[Tamer Companion Manager] Could not index companion compendium.", pack.collection, error);
+      }
+    }
+    entries.sort((a,b) => a.name.localeCompare(b.name) || a.sourceTitle.localeCompare(b.sourceTitle));
+    return {
+      packs: packs.map(pack => ({ collection: pack.collection, title: pack.title })),
+      selectedSource: this.source,
+      entries
+    };
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    if (!this.element) return;
+    const search = this.element.querySelector("[name='tcm-companion-search']");
+    const source = this.element.querySelector("[name='tcm-companion-source']");
+    const list = this.element.querySelector(".tcm-companion-browser-list");
+    const empty = this.element.querySelector(".tcm-companion-browser-empty");
+    const count = this.element.querySelector(".tcm-companion-browser-count");
+
+    const filter = () => {
+      const query = String(search?.value ?? "").trim().toLowerCase();
+      let shown = 0;
+      for (const row of list?.querySelectorAll(".tcm-companion-browser-entry") ?? []) {
+        const matches = !query || String(row.dataset.search ?? "").toLowerCase().includes(query);
+        row.hidden = !matches;
+        if (matches) shown++;
+      }
+      if (count) count.textContent = `${shown} companion${shown === 1 ? "" : "s"}`;
+      if (empty) empty.hidden = shown !== 0;
+    };
+
+    search?.addEventListener("input", filter);
+    source?.addEventListener("change", async event => {
+      this.source = event.currentTarget.value;
+      await this.render({ force: true });
+    });
+    filter();
+  }
+
+  static async _onRefresh() { await this.render({ force: true }); }
+
+  static async _onSelectCompanion(event, target) {
+    const packCollection = target.dataset.pack;
+    const documentId = target.dataset.id;
+    const pack = game.packs.get(packCollection);
+    if (!pack || pack.documentName !== "Actor") return ui.notifications.error("That companion source is no longer available.");
+    if (!game.user.isGM && !pack.visible) return ui.notifications.warn("You do not have permission to access that compendium.");
+
+    try {
+      const actor = await game.actors.importFromCompendium(pack, documentId);
+      if (!actor) return ui.notifications.error("The companion could not be imported into the World.");
+      await this.close();
+      await this.manager?._linkCompanion(actor);
+    } catch (error) {
+      console.error("[Tamer Companion Manager] Failed to import companion from compendium.", error);
+      ui.notifications.error("The companion could not be imported from that compendium. See the browser console for details.");
+    }
+  }
+}
+
+class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(ApplicationV2) {
+  static DEFAULT_OPTIONS = {
+    id: "tcm-companion-sources",
+    classes: ["tcm-companion-sources"],
+    window: { title: "Companion Sources", icon: "fa-solid fa-database", resizable: true },
+    position: { width: 720, height: 640 },
+    actions: { save: this._onSave }
+  };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/companion-sources.hbs`, root: true } };
+
+  async _prepareContext() {
+    const selected = new Set(foundry.utils.deepClone(game.settings.get(MODULE_ID, "companionSourcePacks") ?? []).map(String));
+    const packs = [...game.packs.values()]
+      .filter(pack => pack.documentName === "Actor")
+      .sort((a,b) => a.title.localeCompare(b.title))
+      .map(pack => ({
+        collection: pack.collection,
+        title: pack.title,
+        packageName: pack.metadata?.packageName ?? pack.metadata?.package ?? "",
+        selected: selected.has(pack.collection),
+        visible: pack.visible
+      }));
+    return { packs, selectedCount: packs.filter(pack => pack.selected).length };
+  }
+
+  static async _onSave(event, target) {
+    const form = target.closest("form");
+    const selected = [...(form?.querySelectorAll("input[name='companionSourcePack']:checked") ?? [])].map(input => input.value);
+    await game.settings.set(MODULE_ID, "companionSourcePacks", selected);
+    ui.notifications.info(`Companion sources updated. ${selected.length} Actor compendium${selected.length === 1 ? "" : "s"} enabled.`);
+    await this.close();
+  }
 }
 
 class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -858,7 +1007,9 @@ class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(Appli
 Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "improvementTrees", { scope: "world", config: false, type: Array, default: [] });
   game.settings.register(MODULE_ID, "standardImprovementSources", { scope: "world", config: false, type: Array, default: [] });
+  game.settings.register(MODULE_ID, "companionSourcePacks", { scope: "world", config: false, type: Array, default: [] });
   game.settings.registerMenu(MODULE_ID, "openImprovementRegistry", { name: "Bespoke Companion Improvements", label: "Register Improvements", hint: "Register additional improvement trees for bespoke companions.", icon: "fa-solid fa-tree", type: TamerCompanionImprovementRegistry, restricted: true });
+  game.settings.registerMenu(MODULE_ID, "openCompanionSources", { name: "Companion Sources", label: "Configure Companion Sources", hint: "Choose which Actor compendiums the Add Companion browser can use.", icon: "fa-solid fa-database", type: TamerCompanionSourceRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openManager", { name: "Tamer Companion Manager", label: "Open Companion Manager", hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.", icon: "fa-solid fa-paw", type: TamerCompanionManager, restricted: false });
   game.tamerCompanionManager = { open: actor => TamerCompanionManager.open(actor), isTamer: actor => TamerCompanionManager.isTamer(actor), getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor), getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level) };
   const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
