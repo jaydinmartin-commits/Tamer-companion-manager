@@ -29,33 +29,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static getMaxCompanionSize(level) { if (level >= 13) return "Huge"; if (level >= 9) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
   static getMaxCompanionCR(level) { if (level >= 19) return 6; if (level >= 16) return 5; if (level >= 13) return 4; if (level >= 10) return 3; if (level >= 7) return 2; if (level >= 4) return 1; return 0.5; }
-  static getActorCR(actor) {
-    const raw = actor?.system?.details?.cr;
-    if (typeof raw === "number") return raw;
-    if (typeof raw === "string") {
-      const text = raw.trim();
-      if (text.includes("/")) {
-        const [a,b] = text.split("/").map(Number);
-        if (Number.isFinite(a) && Number.isFinite(b) && b) return a / b;
-      }
-      const n = Number(text);
-      if (Number.isFinite(n)) return n;
-    }
-    return 0.5;
-  }
-  static getCRUnlockLevel(cr) {
-    const value = Number(cr);
-    if (value <= 0.5) return 1;
-    if (value <= 1) return 4;
-    if (value <= 2) return 7;
-    if (value <= 3) return 10;
-    if (value <= 4) return 13;
-    if (value <= 5) return 16;
-    return 19;
-  }
-  static getStandardImprovementCount(level) { return Math.max(0, Number(level) - 1); }
-  static getStandardTrainingHitDice(level) { return [4, 8, 12, 16, 19].filter(l => Number(level) >= l).length; }
-  static getBespokeResilienceHitDice(level) { return [3, 5, 11, 17].filter(l => Number(level) >= l).length; }
   static getStandardImprovementSources() { return foundry.utils.deepClone(game.settings.get(MODULE_ID, "standardImprovementSources") ?? []); }
   static async getStandardImprovementItems() { return this.resolveSources(this.getStandardImprovementSources()); }
   static async resolveSources(sources) {
@@ -101,13 +74,17 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     await this.save(tamer,records); ui.notifications.info(`${source.name} added to ${actor.name}.`); return true;
   }
   static getProgression(record,actor,level) {
-    const cr = Number(record?.crAtBond ?? this.getActorCR(actor));
-    const unlock = this.getCRUnlockLevel(cr);
     const chosen = (record?.improvements ?? []).length;
-    const target = Number(level) >= unlock ? Number(level) - unlock : 0;
-    const asiHitDice = [4, 8, 12, 16, 19].filter(l => l >= unlock && Number(level) >= l).length;
+    const target = 1 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0) + (level >= 9 ? 1 : 0) + (level >= 13 ? 1 : 0) + (level >= 17 ? 1 : 0);
     const bespokeHitDice = record?.bespokeTreeId ? this.getBespokeResilienceHitDice(level) : 0;
-    return { target, chosen, pending: Math.max(0, target - chosen), asiHitDice, bespokeHitDice, bonusHitDice: asiHitDice + bespokeHitDice, bespokeTree: record?.bespokeTreeId ?? null, cr };
+    return {
+      target,
+      chosen,
+      pending: Math.max(0, target - chosen),
+      bespokeHitDice,
+      bonusHitDice: bespokeHitDice,
+      bespokeTree: record?.bespokeTreeId ?? null
+    };
   }
 
   static async spendSoulBond(tamer, records, index, amount) {
@@ -151,7 +128,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if(!(actor.isOwner||game.user.isGM))return ui.notifications.warn("You do not have permission to use that Actor as a companion.");
     if(records.some(r=>r.actorUuid===actor.uuid))return ui.notifications.warn(`${actor.name} is already linked to this Tamer.`);
     const tree=await TamerCompanionManager.findBespokeTree(actor);
-    records.push({id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,crAtBond:TamerCompanionManager.getActorCR(actor),crAtBond:TamerCompanionManager.getActorCR(actor),vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0});
+    records.push({id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0});
     await TamerCompanionManager.save(this.tamer,records);
     ui.notifications.info(tree?`${actor.name} has been bonded with ${tree.name} improvements available.`:`${actor.name} has been bonded as a companion.`);
     await this.render({force:true}); return true;
