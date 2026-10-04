@@ -1,0 +1,21 @@
+<section class="tcm-registry">
+  <header class="tcm-registry-header">
+    <div><h2>Bespoke Companion Improvements</h2><p>Standard Monster Trainer Improvements are always available. Register additional improvement pools for bespoke companions.</p></div>
+    <button type="button" data-action="addTree"><i class="fa-solid fa-plus"></i> New Tree</button>
+  </header>
+  {{#if editing}}
+    <form class="tcm-registry-editor">
+      <div class="form-group"><label>Tree Name</label><input name="name" value="{{editing.name}}" placeholder="e.g. Khaji Da Improvements"></div>
+      <div class="form-group"><label>Companion Name Match</label><input name="matchName" value="{{editing.matchName}}" placeholder="Exact Actor name"></div>
+      <div class="tcm-tree-drop-zone"><i class="fa-solid fa-folder-plus"></i><strong>Drop Improvement Items or Folders Here</strong><small>Only Monster Trainer Improvement Items are accepted. Folders are scanned recursively.</small></div>
+      <ul class="tcm-tree-sources">{{#each editing.sources}}<li>{{name}} <small>({{type}})</small></li>{{/each}}</ul>
+      <div class="tcm-actions"><button type="button" data-action="saveTree" class="primary">Save Tree</button><button type="button" data-action="cancelEdit">Cancel</button></div>
+    </form>
+  {{else}}
+    <div class="tcm-registry-list">
+      {{#each trees}}
+        <article class="tcm-registry-card"><div><h3>{{name}}</h3><p>Matches: <strong>{{matchName}}</strong></p><small>{{sources.length}} registered source(s)</small></div><div class="tcm-actions"><button type="button" data-action="editTree" data-id="{{id}}">Edit</button><button type="button" data-action="removeTree" data-id="{{id}}">Remove</button></div></article>
+      {{else}}<p>No bespoke improvement trees are registered yet.</p>{{/each}}
+    </div>
+  {{/if}}
+</section>
