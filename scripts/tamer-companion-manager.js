@@ -173,6 +173,66 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const closeRange = 5;
     const tokenDoc = await actor.getTokenDocument({}, { parent: canvas.scene });
 
+    // Temporary diagnostic instrumentation for Foundry v14 native placement.
+    // This does not replace or intercept placement; it only records the native
+    // event path so we can identify why left-click confirmation is being lost.
+    const DEBUG = "[Tamer Companion Manager][Placement Debug]";
+    const stage = canvas.stage;
+    const tokenLayer = canvas.tokens;
+    const diagnostic = {
+      startedAt: Date.now(),
+      activeLayer: canvas.activeLayer?.constructor?.name ?? "unknown",
+      tokenLayerActive: Boolean(tokenLayer.active),
+      tokenLayerEventMode: tokenLayer.eventMode,
+      hasPreviewBefore: tokenLayer.hasPreview,
+      hasPlacementContextBefore: Boolean(tokenLayer._placementContext)
+    };
+    console.groupCollapsed(DEBUG + " Native placement started");
+    console.log(diagnostic);
+    console.log(DEBUG, "TokenLayer", tokenLayer);
+    console.groupEnd();
+
+    const onStagePointerDown = event => {
+      console.log(DEBUG, "Canvas stage pointerdown", {
+        button: event.button,
+        pointerType: event.pointerType,
+        target: event.target?.constructor?.name,
+        activeLayer: canvas.activeLayer?.constructor?.name,
+        tokenLayerActive: Boolean(tokenLayer.active),
+        hasPreview: tokenLayer.hasPreview,
+        hasPlacementContext: Boolean(tokenLayer._placementContext)
+      });
+    };
+    const onStagePointerUp = event => {
+      console.log(DEBUG, "Canvas stage pointerup", {
+        button: event.button,
+        pointerType: event.pointerType,
+        target: event.target?.constructor?.name,
+        hasPreview: tokenLayer.hasPreview,
+        hasPlacementContext: Boolean(tokenLayer._placementContext)
+      });
+    };
+
+    stage?.on("pointerdown", onStagePointerDown);
+    stage?.on("pointerup", onStagePointerUp);
+
+    const originalTokenClick = tokenLayer._onClickLeft;
+    let nativeClickCount = 0;
+    if (typeof originalTokenClick === "function") {
+      tokenLayer._onClickLeft = function(event) {
+        nativeClickCount += 1;
+        console.log(DEBUG, "TokenLayer _onClickLeft reached", {
+          count: nativeClickCount,
+          button: event?.button,
+          hasPreview: tokenLayer.hasPreview,
+          hasPlacementContext: Boolean(tokenLayer._placementContext)
+        });
+        return originalTokenClick.call(this, event);
+      };
+    } else {
+      console.warn(DEBUG, "TokenLayer _onClickLeft was not available for diagnostic wrapping.");
+    }
+
     let placed;
     try {
       placed = await canvas.tokens.placeTokens([tokenDoc.toObject()], {
@@ -181,14 +241,25 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           controlObject: false
         },
         preConfirm: ({ document }) => {
+          console.log(DEBUG, "preConfirm reached", {
+            x: document.x,
+            y: document.y,
+            width: document.width,
+            height: document.height,
+            hasPreview: tokenLayer.hasPreview,
+            hasPlacementContext: Boolean(tokenLayer._placementContext)
+          });
+
           const center = {
             x: document.x + (document.width * grid.sizeX) / 2,
             y: document.y + (document.height * grid.sizeY) / 2
           };
 
           const distance = grid.measureDistance(tamerCenter, center);
+          console.log(DEBUG, "preConfirm distance", distance);
           if (distance > range) {
             ui.notifications.warn("The companion must be summoned within 30 feet of the Tamer.");
+            console.warn(DEBUG, "preConfirm rejected: out of range.");
             return false;
           }
 
@@ -197,13 +268,29 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
           if (!withinCloseRange && !visible) {
             ui.notifications.warn("The companion must be within 30 feet and within the Tamer's line of sight, or within 5 feet of the Tamer.");
+            console.warn(DEBUG, "preConfirm rejected: not visible and beyond 5 feet.");
             return false;
           }
 
+          console.log(DEBUG, "preConfirm accepted.");
           return true;
         }
       });
+      console.log(DEBUG, "placeTokens promise resolved", {
+        placedCount: placed?.length ?? 0,
+        nativeClickCount,
+        elapsedMs: Date.now() - diagnostic.startedAt
+      });
     } finally {
+      stage?.off("pointerdown", onStagePointerDown);
+      stage?.off("pointerup", onStagePointerUp);
+      if (typeof originalTokenClick === "function") tokenLayer._onClickLeft = originalTokenClick;
+      console.log(DEBUG, "Native placement cleanup", {
+        nativeClickCount,
+        hasPreviewAfter: tokenLayer.hasPreview,
+        hasPlacementContextAfter: Boolean(tokenLayer._placementContext),
+        activeLayerAfter: canvas.activeLayer?.constructor?.name
+      });
       // Leave the layer in Foundry's normal state. placeTokens itself owns
       // creation/cancellation of its preview and click workflow.
       if (previousLayer && previousLayer !== canvas.tokens) {
