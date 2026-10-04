@@ -28,6 +28,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static getMaxCompanionSize(level) { if (level >= 13) return "Huge"; if (level >= 9) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
   static getMaxCompanionCR(level) { if (level >= 19) return 6; if (level >= 16) return 5; if (level >= 13) return 4; if (level >= 10) return 3; if (level >= 7) return 2; if (level >= 4) return 1; return 0.5; }
   static getASILevels(level) { return [4, 8, 12, 16, 19].filter(l => level >= l).length; }
+  static isMonsterTrainerImprovement(item) { return String(item?.type ?? "").toLowerCase() === "monster-trainer-improvement" || String(item?.system?.type ?? "").toLowerCase() === "monster-trainer-improvement" || String(item?.system?.identifier ?? "").toLowerCase() === "monster-trainer-improvement"; }
+  static getMonsterTrainerImprovements(actor) { return actor?.items?.filter(item => this.isMonsterTrainerImprovement(item)) ?? []; }
   static getTrainingOptions() {
     return [
       { id: "speed", name: "Speed Training", description: "Increase one existing speed by 15 feet, up to 150% of its base speed." },
@@ -68,6 +70,39 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const value = Number(actor.system?.attributes?.hp?.value ?? 0);
       await actor.update({ "system.attributes.hp.max": max + hp, "system.attributes.hp.value": value + hp });
     }
+  }
+  static async addMonsterTrainerImprovement(tamer, record, actor, item) {
+    if (!this.isMonsterTrainerImprovement(item)) return ui.notifications.warn("That Item is not a Monster Trainer Improvement.");
+    const existing = this.getMonsterTrainerImprovements(actor);
+    const level = this.getTamerLevel(tamer);
+    const target = this.getImprovementTarget(level, actor);
+    if (existing.length >= target) return ui.notifications.warn(`${actor.name} has no unassigned Monster Trainer Improvements available.`);
+    if (existing.some(i => i.name === item.name && String(i.system?.identifier ?? "") === String(item.system?.identifier ?? ""))) return ui.notifications.warn(`${actor.name} already has ${item.name}.`);
+    const data = item.toObject();
+    delete data._id;
+    const created = await actor.createEmbeddedDocuments("Item", [data]);
+    if (!created?.length) return false;
+    const records = this.records(tamer);
+    const targetRecord = records.find(r => r.id === record.id);
+    if (targetRecord) {
+      targetRecord.improvements ??= [];
+      targetRecord.improvements.push({ itemUuid: created[0].uuid, itemId: created[0].id, name: created[0].name, assignedAtLevel: level });
+      await this.save(tamer, records);
+    }
+    ui.notifications.info(`${item.name} added to ${actor.name}.`);
+    return true;
+  }
+  static async _onDropImprovement(event, index) {
+    event.preventDefault();
+    const record = this.records(this.tamer)[Number(index)];
+    const actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+    if (!record || !actor) return;
+    const data = TextEditor.getDragEventData(event);
+    if (data?.type !== "Item") return ui.notifications.warn("Drop a Monster Trainer Improvement Item here.");
+    const item = data.uuid ? await fromUuid(data.uuid).catch(() => null) : null;
+    if (!item) return ui.notifications.error("The dropped Item could not be resolved.");
+    await this.addMonsterTrainerImprovement(this.tamer, record, actor, item);
+    await this.render({ force: true });
   }
   static async openTraining(tamer, record, actor) {
     const level = this.getTamerLevel(tamer);
