@@ -328,3 +328,27 @@
   overflow-y: auto;
   text-align: left !important;
 }
+
+/* v0.1.48 improvement picker alignment */
+.tcm-improvement-dialog .tcm-unified-improvement-group .tcm-advancement-options {
+  align-items: stretch;
+}
+.tcm-improvement-dialog .tcm-advancement-option {
+  align-items: center;
+}
+.tcm-improvement-dialog .tcm-advancement-icon {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+.tcm-improvement-dialog .tcm-advancement-text {
+  justify-content: center;
+  align-self: center;
+}
+.tcm-improvement-dialog .tcm-advancement-text strong {
+  line-height: 1.15;
+}
+.tcm-improvement-dialog .tcm-improvement-prerequisite {
+  margin: 0;
+}
