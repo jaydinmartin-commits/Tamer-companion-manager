@@ -57,3 +57,6 @@ Foundry > Add-on Modules > Install Module > Manifest URL:
 
 
 Release packaging trigger for v0.1.29. [release-package]
+
+
+Packaging trigger for v0.1.30.
