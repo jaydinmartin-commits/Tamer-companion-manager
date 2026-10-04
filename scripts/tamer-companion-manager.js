@@ -76,7 +76,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static getProgression(record,actor,level) {
     const chosen = (record?.improvements ?? []).length;
     const target = 1 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0) + (level >= 9 ? 1 : 0) + (level >= 13 ? 1 : 0) + (level >= 17 ? 1 : 0);
-    const bespokeHitDice = record?.bespokeTreeId ? this.getBespokeResilienceHitDice(level) : 0;
+    const bespokeHitDice = record?.bespokeTreeId ? [3, 5, 11, 17].filter(l => Number(level) >= l).length : 0;
     return {
       target,
       chosen,
