@@ -264,3 +264,43 @@
 .tcm-improvement-tooltip p:last-child {
   margin-bottom:0;
 }
+
+/* v0.1.42 picker hardening: keep DialogV2 footer visible while only the list scrolls */
+.tcm-improvement-dialog .window-content,
+.tcm-improvement-dialog .dialog-content,
+.tcm-improvement-dialog form {
+  min-height:0;
+}
+.tcm-improvement-dialog .dialog-content {
+  display:flex;
+  flex-direction:column;
+}
+.tcm-improvement-dialog .tcm-advancement {
+  flex:1 1 auto;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.tcm-improvement-dialog .tcm-advancement-header {
+  flex:0 0 auto;
+}
+.tcm-improvement-dialog .tcm-advancement-list {
+  flex:1 1 auto;
+  min-height:0;
+  height:auto;
+  max-height:none;
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.tcm-improvement-dialog .form-footer,
+.tcm-improvement-dialog footer.form-footer,
+.tcm-improvement-dialog .dialog-buttons {
+  flex:0 0 auto;
+  display:flex;
+  position:relative;
+  z-index:20;
+  visibility:visible;
+}
+.tcm-improvement-tooltip {
+  text-align:left !important;
+}
