@@ -304,3 +304,27 @@
 .tcm-improvement-tooltip {
   text-align:left !important;
 }
+
+
+/* v0.1.46 improvement picker refinements */
+.tcm-improvement-dialog .tcm-advancement-option[hidden] {
+  display: none !important;
+}
+
+.tcm-improvement-dialog .tcm-improvement-prerequisite {
+  display: block;
+  font-size: .68rem;
+  line-height: 1.25;
+  opacity: .72;
+}
+
+.tcm-cursor-tooltip {
+  position: fixed !important;
+  z-index: 100000 !important;
+  pointer-events: none !important;
+  display: none;
+  max-width: 420px;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  text-align: left !important;
+}
