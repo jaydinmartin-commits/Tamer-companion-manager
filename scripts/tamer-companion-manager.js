@@ -190,7 +190,7 @@ class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(Appli
   static DEFAULT_OPTIONS={id:"tamer-bespoke-improvements",window:{title:"Bespoke Companion Improvements",icon:"fa-solid fa-tree"},position:{width:720,height:620},actions:{addTree:this._onAddTree,saveTree:this._onSaveTree,editTree:this._onEditTree,removeTree:this._onRemoveTree,cancelEdit:this._onCancelEdit}};
   static PARTS={main:{template:`modules/${MODULE_ID}/templates/improvement-registry.hbs`,root:true}};
   constructor(options={}){super(options);this.editing=null;}
-  async _prepareContext(){return{trees:TamerCompanionManager.getImprovementRegistry(),editing:this.editing};}
+  async _prepareContext(){return{trees:TamerCompanionManager.getImprovementRegistry(),standardSources:TamerCompanionManager.getStandardImprovementSources(),editing:this.editing};}
   static async _onAddTree(){this.editing={id:foundry.utils.randomID(),name:"",matchName:"",sources:[]};await this.render({force:true});}
   static async _onEditTree(event,target){this.editing=TamerCompanionManager.getImprovementRegistry().find(t=>t.id===target.dataset.id)??null;if(this.editing)await this.render({force:true});}
   static async _onCancelEdit(){this.editing=null;await this.render({force:true});}
