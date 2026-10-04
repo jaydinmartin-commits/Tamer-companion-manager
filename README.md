@@ -32,6 +32,8 @@ Foundry > Add-on Modules > Install Module > Manifest URL:
 
 `https://raw.githubusercontent.com/jaydinmartin-commits/Tamer-companion-manager/main/module.json`
 
-
 ## Release 0.1.11
 - Stable GitHub release manifest for Foundry package updates.
+
+## Release packaging
+- Automated release packaging is enabled for tagged module versions. [release-package]
