@@ -170,30 +170,15 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const tokenDoc = await actor.getTokenDocument({}, { parent: canvas.scene });
     // Foundry's native placement API normally confirms on left-click.
-    // Some v14 canvas/application combinations can leave the preview active
-    // while the layer's click handler misses the confirmation. Add a narrow
-    // fallback which only operates while this summon placement is active.
+    // In this setup the preview receives pointer movement, but the normal
+    // TokenLayer click dispatch is not reaching the placement workflow.
+    // Forward the canvas pointer event directly to Foundry's own confirmation
+    // handler while placement is active.
     let placementActive = true;
     const placementClickFallback = event => {
       if (!placementActive || event.button !== 0) return;
       setTimeout(() => {
-        if (!placementActive) return;
-        const context = canvas.tokens?._placementContext;
-        if (!context) return;
-
-        const document = context.previews?.[context.index]?.document
-          ?? context.previews?.[0]?.document;
-        if (!document) return;
-
-        const allowed = context.preConfirm?.({
-          count: 1,
-          document,
-          event,
-          index: context.index ?? 0
-        });
-        if (allowed === false) return;
-
-        // Invoke Foundry's own TokenLayer confirmation path.
+        if (!placementActive || !canvas.tokens?._placementContext) return;
         canvas.tokens._onClickLeft(event);
       }, 0);
     };
