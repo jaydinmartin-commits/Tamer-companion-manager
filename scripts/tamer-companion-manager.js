@@ -134,62 +134,57 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       ?? null;
   }
 
-  static async summon(tamer, record) {
-    if (!canvas?.scene || !canvas.tokens) {
-      ui.notifications.warn("A scene must be active."); return false;
-    }
-    const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
-    if (!actor) { ui.notifications.error("The companion Actor could not be found."); return false; }
-    const records = this.records(tamer);
-    if (await this.summonedRecord(records)) { ui.notifications.warn("Another companion is already summoned."); return false; }
-    const tamerToken = this.tamerToken(tamer);
-    if (!tamerToken) { ui.notifications.warn("Place the Tamer's token on the current scene first."); return false; }
+  static findAdjacentSpace(tamerToken) {
+    const grid = canvas.grid.size;
+    const x = tamerToken.document.x;
+    const y = tamerToken.document.y;
+    const candidates = [
+      { x: x + grid, y },
+      { x: x - grid, y },
+      { x, y: y + grid },
+      { x, y: y - grid }
+    ];
 
-    const grid = canvas.grid;
-    const size = grid.size;
-    const tokenDoc = await actor.getTokenDocument({}, { parent: canvas.scene });
-    const tokenWidth = Number(tokenDoc.width ?? 1);
-    const tokenHeight = Number(tokenDoc.height ?? 1);
-    const tamerCenter = tamerToken.center;
-    const candidates = [];
-    for (let radius = 1; radius <= 3; radius++) {
-      for (let dy = -radius; dy <= radius; dy++) {
-        for (let dx = -radius; dx <= radius; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-          candidates.push({ x: tamerToken.document.x + dx * size, y: tamerToken.document.y + dy * size });
-        }
-      }
+    for (const p of candidates) {
+      const occupied = canvas.tokens.placeables.some(t =>
+        t.document.x === p.x && t.document.y === p.y
+      );
+      if (!occupied && p.x >= 0 && p.y >= 0) return p;
     }
-    const occupied = canvas.tokens.placeables.filter(token => token.document?.id !== tamerToken.document?.id);
-    const withinFiveFeet = candidate => {
-      const center = { x: candidate.x + tokenWidth * size / 2, y: candidate.y + tokenHeight * size / 2 };
-      return grid.measureDistance(tamerCenter, center) <= 5;
-    };
-    const overlapsToken = candidate => {
-      const left = candidate.x, right = candidate.x + tokenWidth * size, top = candidate.y, bottom = candidate.y + tokenHeight * size;
-      return occupied.some(token => {
-        const tx = token.document.x, ty = token.document.y;
-        const tw = Number(token.document.width ?? 1) * size, th = Number(token.document.height ?? 1) * size;
-        return left < tx + tw && right > tx && top < ty + th && bottom > ty;
-      });
-    };
-    const inBounds = candidate => {
-      const sceneWidth = Number(canvas.scene.width ?? 0) * size, sceneHeight = Number(canvas.scene.height ?? 0) * size;
-      if (!sceneWidth || !sceneHeight) return true;
-      return candidate.x >= 0 && candidate.y >= 0 && candidate.x + tokenWidth * size <= sceneWidth && candidate.y + tokenHeight * size <= sceneHeight;
-    };
-    const position = candidates.find(candidate => withinFiveFeet(candidate) && inBounds(candidate) && !overlapsToken(candidate));
-    if (!position) { ui.notifications.warn("No unoccupied space within 5 feet of the Tamer was found."); return false; }
-    tokenDoc.updateSource({ x: position.x, y: position.y });
+    return null;
+  }
+
+  static async summon(tamer, record) {
+    if (!canvas?.scene) return ui.notifications.warn("A scene must be active.");
+    const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+    if (!actor) return ui.notifications.error("The companion Actor could not be found.");
+
+    const records = this.records(tamer);
+    if (await this.summonedRecord(records)) {
+      ui.notifications.warn("Another companion is already summoned.");
+      return false;
+    }
+
+    const tamerToken = this.tamerToken(tamer);
+    if (!tamerToken) {
+      ui.notifications.warn("Place the Tamer's token on the current scene first.");
+      return false;
+    }
+
+    const position = this.findAdjacentSpace(tamerToken);
+    if (!position) {
+      ui.notifications.warn("No adjacent unoccupied space was found.");
+      return false;
+    }
+
+    const tokenDoc = await actor.getTokenDocument(position);
     const created = await canvas.scene.createEmbeddedDocuments("Token", [tokenDoc.toObject()]);
-    const placed = created?.[0];
-    if (!placed) { ui.notifications.error("The companion Token could not be created."); return false; }
-    const recordsAfterPlacement = this.records(tamer);
-    const target = recordsAfterPlacement.find(r => r.id === record.id);
-    if (!target) { await placed.delete(); return false; }
-    target.tokenUuid = placed.uuid;
+    const target = records.find(r => r.id === record.id);
+    if (!target || !created?.[0]) return false;
+
+    target.tokenUuid = created[0].uuid;
     target.status = "summoned";
-    await this.save(tamer, recordsAfterPlacement);
+    await this.save(tamer, records);
     ui.notifications.info(`${actor.name} has been summoned.`);
     return true;
   }
