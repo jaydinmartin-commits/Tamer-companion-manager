@@ -863,6 +863,7 @@ class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     entries.sort((a,b) => a.name.localeCompare(b.name) || a.sourceTitle.localeCompare(b.sourceTitle));
     return {
+      selectedAll: this.source === "all",
       packs: packs.map(pack => ({ collection: pack.collection, title: pack.title, selected: this.source === pack.collection })),
       selectedSource: this.source,
       entries
