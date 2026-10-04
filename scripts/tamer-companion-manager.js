@@ -305,15 +305,28 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  Hooks.on("getActorSheetHeaderButtons", (app, buttons) => {
-    if (!TamerCompanionManager.isTamer(app?.actor)) return;
-    buttons.unshift({
-      class: "tamer-companion-manager-open",
-      icon: "fa-solid fa-paw",
+  // Foundry v14 / ApplicationV2 uses getHeaderControlsApplicationV2
+  // rather than the legacy getActorSheetHeaderButtons hook.
+  Hooks.on("getHeaderControlsApplicationV2", (app, controls) => {
+    if (!app?.actor || !TamerCompanionManager.isTamer(app.actor)) return;
+
+    controls.unshift({
       label: "Companions",
-      onclick: () => TamerCompanionManager.open(app.actor)
+      icon: "fa-solid fa-paw",
+      onClick: () => TamerCompanionManager.open(app.actor)
     });
   });
+
+  // Expose the public API for integrations, but no macro is required.
+  const module = game.modules.get(MODULE_ID);
+  if (module) {
+    module.api = {
+      open: actor => TamerCompanionManager.open(actor),
+      isTamer: actor => TamerCompanionManager.isTamer(actor),
+      getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor),
+      getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level)
+    };
+  }
 });
 
 globalThis.TamerCompanionManager = TamerCompanionManager;
