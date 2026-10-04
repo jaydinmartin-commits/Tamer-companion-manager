@@ -383,7 +383,18 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async _onSummonCompanion(event, target) {
     const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)];
-    if (record && await TamerCompanionManager.summon(this.tamer, record)) await this.render({ force: true });
+    if (!record) return;
+
+    // Hide the manager so it cannot intercept the canvas click used by
+    // Foundry's native TokenLayer placement workflow.
+    const manager = this;
+    await manager.close();
+
+    try {
+      await TamerCompanionManager.summon(manager.tamer, record);
+    } finally {
+      await manager.render({ force: true });
+    }
   }
 
   static async _onDismissCompanion(event, target) {
