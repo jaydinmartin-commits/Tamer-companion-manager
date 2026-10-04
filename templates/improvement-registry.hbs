@@ -1,13 +1,14 @@
 <section class="tcm-registry">
   <header class="tcm-registry-header">
-    <div><h2>Bespoke Companion Improvements</h2><p>Standard Monster Trainer Improvements are always available. Register additional improvement pools for bespoke companions.</p></div>
+    <div><h2>Bespoke Companion Improvements</h2><p>Register the standard Monster Trainer Improvement pool and additional bespoke companion improvement trees. Any Item can be registered.</p></div>
     <button type="button" data-action="addTree"><i class="fa-solid fa-plus"></i> New Tree</button>
   </header>
   {{#if editing}}
+    <div class="tcm-standard-drop-zone"><i class="fa-solid fa-list-check"></i><strong>Standard Monster Trainer Improvements</strong><small>Drop the Item or Folder containing your base Monster Trainer Improvements here.</small><ul class="tcm-tree-sources">{{#each standardSources}}<li>{{name}} <small>({{type}})</small></li>{{/each}}</ul></div>
     <form class="tcm-registry-editor">
       <div class="form-group"><label>Tree Name</label><input name="name" value="{{editing.name}}" placeholder="e.g. Khaji Da Improvements"></div>
       <div class="form-group"><label>Companion Name Match</label><input name="matchName" value="{{editing.matchName}}" placeholder="Exact Actor name"></div>
-      <div class="tcm-tree-drop-zone"><i class="fa-solid fa-folder-plus"></i><strong>Drop Improvement Items or Folders Here</strong><small>Only Monster Trainer Improvement Items are accepted. Folders are scanned recursively.</small></div>
+      <div class="tcm-tree-drop-zone"><i class="fa-solid fa-folder-plus"></i><strong>Drop Improvement Items or Folders Here</strong><small>Any Item or Folder is accepted. Folders are scanned recursively.</small></div>
       <ul class="tcm-tree-sources">{{#each editing.sources}}<li>{{name}} <small>({{type}})</small></li>{{/each}}</ul>
       <div class="tcm-actions"><button type="button" data-action="saveTree" class="primary">Save Tree</button><button type="button" data-action="cancelEdit">Cancel</button></div>
     </form>
