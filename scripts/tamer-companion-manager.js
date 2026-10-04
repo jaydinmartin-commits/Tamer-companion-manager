@@ -863,7 +863,7 @@ class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     entries.sort((a,b) => a.name.localeCompare(b.name) || a.sourceTitle.localeCompare(b.sourceTitle));
     return {
-      packs: packs.map(pack => ({ collection: pack.collection, title: pack.title })),
+      packs: packs.map(pack => ({ collection: pack.collection, title: pack.title, selected: this.source === pack.collection })),
       selectedSource: this.source,
       entries
     };
@@ -925,7 +925,7 @@ class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(Applicatio
     classes: ["tcm-companion-sources"],
     window: { title: "Companion Sources", icon: "fa-solid fa-database", resizable: true },
     position: { width: 720, height: 640 },
-    actions: { save: this._onSave }
+    actions: { save: this._onSave, cancel: this._onCancel }
   };
   static PARTS = { main: { template: `modules/${MODULE_ID}/templates/companion-sources.hbs`, root: true } };
 
@@ -951,6 +951,8 @@ class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(Applicatio
     ui.notifications.info(`Companion sources updated. ${selected.length} Actor compendium${selected.length === 1 ? "" : "s"} enabled.`);
     await this.close();
   }
+
+  static async _onCancel() { await this.close(); }
 }
 
 class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(ApplicationV2) {
