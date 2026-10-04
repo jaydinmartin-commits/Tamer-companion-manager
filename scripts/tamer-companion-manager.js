@@ -192,7 +192,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     return true;
   }
 
-  static open(actor) {
+  static async open(actor) {
     actor ??= game.actors.contents.find(a => this.isTamer(a) && (a.isOwner || game.user.isGM));
     if (!actor) return ui.notifications.warn("No Tamer Actor was found. Create a character with the Tamer class first.");
     if (!this.isTamer(actor)) return ui.notifications.warn("This Actor does not have a Tamer class.");
@@ -320,9 +320,6 @@ Hooks.once("init", () => {
     getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor),
     getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level)
   };
-});
-
-
 
   const addCompanionControl = (app, controls) => {
     const actor = app?.actor;
@@ -338,13 +335,8 @@ Hooks.once("init", () => {
     });
   };
 
-  // Native v14 ApplicationV2 header-control hook.
   Hooks.on("getHeaderControlsApplicationV2", addCompanionControl);
-
-  // Specific ActorSheetV2 hook, when available.
   Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
-
-
 });
 
 globalThis.TamerCompanionManager = TamerCompanionManager;
