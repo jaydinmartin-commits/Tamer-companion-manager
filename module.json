@@ -2,7 +2,7 @@
   "id": "tamer-companion-manager",
   "title": "Tamer Companion Manager",
   "description": "A Foundry VTT companion management interface for Tamer-style classes, initially built around the Heliana's Guide to Monster Hunting Tamer.",
-  "version": "0.1.32",
+  "version": "0.1.33",
   "authors": [
     {
       "name": "Jaydin"
