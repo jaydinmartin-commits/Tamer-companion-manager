@@ -169,7 +169,39 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const closeRange = 5;
 
     const tokenDoc = await actor.getTokenDocument({}, { parent: canvas.scene });
-    const placed = await canvas.tokens.placeTokens([tokenDoc.toObject()], {
+    // Foundry's native placement API normally confirms on left-click.
+    // Some v14 canvas/application combinations can leave the preview active
+    // while the layer's click handler misses the confirmation. Add a narrow
+    // fallback which only operates while this summon placement is active.
+    let placementActive = true;
+    const placementClickFallback = event => {
+      if (!placementActive || event.button !== 0) return;
+      setTimeout(() => {
+        if (!placementActive) return;
+        const context = canvas.tokens?._placementContext;
+        if (!context) return;
+
+        const document = context.previews?.[context.index]?.document
+          ?? context.previews?.[0]?.document;
+        if (!document) return;
+
+        const allowed = context.preConfirm?.({
+          count: 1,
+          document,
+          event,
+          index: context.index ?? 0
+        });
+        if (allowed === false) return;
+
+        // Invoke Foundry's own TokenLayer confirmation path.
+        canvas.tokens._onClickLeft(event);
+      }, 0);
+    };
+    canvas.stage.on("pointerdown", placementClickFallback);
+
+    let placed;
+    try {
+      placed = await canvas.tokens.placeTokens([tokenDoc.toObject()], {
       allowRotation: false,
       preConfirm: ({ document }) => {
         const center = {
@@ -194,6 +226,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         return true;
       }
     });
+
+    } finally {
+      placementActive = false;
+      canvas.stage.off("pointerdown", placementClickFallback);
+    }
 
     if (!placed.length) {
       ui.notifications.info("Summoning cancelled.");
