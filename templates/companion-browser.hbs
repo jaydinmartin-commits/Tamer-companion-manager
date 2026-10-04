@@ -5,9 +5,9 @@
       <input type="search" name="tcm-companion-search" placeholder="Search creatures..." autocomplete="off">
     </div>
     <select name="tcm-companion-source" aria-label="Companion source">
-      <option value="all" {{#if (eq selectedSource "all")}}selected{{/if}}>All Configured Sources</option>
+      <option value="all" {{#if selectedSource}}selected{{/if}}>All Configured Sources</option>
       {{#each packs}}
-        <option value="{{collection}}" {{#if (eq ../selectedSource collection)}}selected{{/if}}>{{title}}</option>
+        <option value="{{collection}}" {{#if selected}}selected{{/if}}>{{title}}</option>
       {{/each}}
     </select>
   </div>
