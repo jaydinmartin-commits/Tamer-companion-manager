@@ -309,16 +309,18 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         if (!tooltip) {
           tooltip = document.createElement("div");
           tooltip.className = "tcm-improvement-tooltip tcm-cursor-tooltip";
+          tooltip.setAttribute("role", "tooltip");
           document.body.appendChild(tooltip);
         }
 
         const hideTooltip = () => {
-          tooltip.hidden = true;
           tooltip.style.display = "none";
+          tooltip.setAttribute("aria-hidden", "true");
         };
 
         const moveTooltip = event => {
-          const offset = 16;
+          if (tooltip.style.display === "none") return;
+          const offset = 14;
           const rect = tooltip.getBoundingClientRect();
           let left = event.clientX + offset;
           let top = event.clientY + offset;
@@ -335,19 +337,40 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         };
 
         const showTooltip = (event, option) => {
-          const html = option.dataset.tcmTooltip || "";
+          const html = option?.dataset?.tcmTooltip || "";
           if (!html) return;
           tooltip.innerHTML = html;
-          tooltip.hidden = false;
           tooltip.style.display = "block";
+          tooltip.setAttribute("aria-hidden", "false");
+          // Force layout before positioning so width/height are available.
+          tooltip.getBoundingClientRect();
           moveTooltip(event);
         };
 
-        for (const option of root.querySelectorAll(".tcm-advancement-option")) {
-          option.addEventListener("pointerenter", event => showTooltip(event, option));
-          option.addEventListener("pointermove", moveTooltip);
-          option.addEventListener("pointerleave", hideTooltip);
-        }
+        // Delegate the events from the picker itself. This is more reliable
+        // across Foundry's DialogV2 application/shadow-DOM rendering than
+        // attaching individual pointer handlers to every row.
+        root.addEventListener("mouseover", event => {
+          const option = event.target.closest?.(".tcm-advancement-option");
+          if (!option || !root.contains(option)) return;
+          showTooltip(event, option);
+        });
+
+        root.addEventListener("mousemove", event => {
+          const option = event.target.closest?.(".tcm-advancement-option");
+          if (option && root.contains(option)) moveTooltip(event);
+        });
+
+        root.addEventListener("mouseout", event => {
+          const option = event.target.closest?.(".tcm-advancement-option");
+          if (!option || !root.contains(option)) return;
+          const next = event.relatedTarget;
+          if (next && option.contains(next)) return;
+          hideTooltip();
+        });
+
+        root.addEventListener("mouseleave", hideTooltip);
+        hideTooltip();
 
         const updateCount = () => {
           const selectedNow = new Set(boxes.filter(input => input.checked).map(input => input.value));
