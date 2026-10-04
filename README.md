@@ -38,3 +38,6 @@ Foundry > Add-on Modules > Install Module > Manifest URL:
 ## Release packaging
 - Automated release packaging is enabled for tagged module versions. [release-package]
 
+
+
+<!-- Release package trigger: 0.1.24 -->
