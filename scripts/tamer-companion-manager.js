@@ -134,30 +134,17 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       ?? null;
   }
 
-  static findAdjacentSpace(tamerToken) {
-    const grid = canvas.grid.size;
-    const x = tamerToken.document.x;
-    const y = tamerToken.document.y;
-    const candidates = [
-      { x: x + grid, y },
-      { x: x - grid, y },
-      { x, y: y + grid },
-      { x, y: y - grid }
-    ];
-
-    for (const p of candidates) {
-      const occupied = canvas.tokens.placeables.some(t =>
-        t.document.x === p.x && t.document.y === p.y
-      );
-      if (!occupied && p.x >= 0 && p.y >= 0) return p;
-    }
-    return null;
-  }
-
   static async summon(tamer, record) {
-    if (!canvas?.scene) return ui.notifications.warn("A scene must be active.");
+    if (!canvas?.scene || !canvas.tokens) {
+      ui.notifications.warn("A scene must be active.");
+      return false;
+    }
+
     const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
-    if (!actor) return ui.notifications.error("The companion Actor could not be found.");
+    if (!actor) {
+      ui.notifications.error("The companion Actor could not be found.");
+      return false;
+    }
 
     const records = this.records(tamer);
     if (await this.summonedRecord(records)) {
@@ -171,18 +158,51 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       return false;
     }
 
-    const position = this.findAdjacentSpace(tamerToken);
-    if (!position) {
-      ui.notifications.warn("No adjacent unoccupied space was found.");
+    const grid = canvas.grid;
+    const tamerCenter = tamerToken.center;
+    const range = 30;
+    const closeRange = 5;
+
+    const tokenDoc = await actor.getTokenDocument({}, { parent: canvas.scene });
+    const placed = await canvas.tokens.placeTokens([tokenDoc.toObject()], {
+      allowRotation: false,
+      preConfirm: ({ document }) => {
+        const center = {
+          x: document.x + (document.width * grid.sizeX) / 2,
+          y: document.y + (document.height * grid.sizeY) / 2
+        };
+
+        const distance = grid.measureDistance(tamerCenter, center);
+        if (distance > range) {
+          ui.notifications.warn("The companion must be summoned within 30 feet of the Tamer.");
+          return false;
+        }
+
+        const withinCloseRange = distance <= closeRange;
+        const visible = canvas.visibility?.testVisibility(center, { object: tamerToken }) ?? true;
+
+        if (!withinCloseRange && !visible) {
+          ui.notifications.warn("The companion must be within 30 feet and within the Tamer's line of sight, or within 5 feet of the Tamer.");
+          return false;
+        }
+
+        return true;
+      }
+    });
+
+    if (!placed.length) {
+      ui.notifications.info("Summoning cancelled.");
       return false;
     }
 
-    const tokenDoc = await actor.getTokenDocument(position);
-    const created = await canvas.scene.createEmbeddedDocuments("Token", [tokenDoc.toObject()]);
-    const target = records.find(r => r.id === record.id);
-    target.tokenUuid = created[0].uuid;
+    const recordsAfterPlacement = this.records(tamer);
+    const target = recordsAfterPlacement.find(r => r.id === record.id);
+    if (!target) return false;
+
+    target.tokenUuid = placed[0].uuid;
     target.status = "summoned";
-    await this.save(tamer, records);
+    await this.save(tamer, recordsAfterPlacement);
+
     ui.notifications.info(`${actor.name} has been summoned.`);
     return true;
   }
