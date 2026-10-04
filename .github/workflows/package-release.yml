@@ -1,8 +1,6 @@
 name: Package Foundry Release
 
 on:
-  push:
-    branches: [main]
   release:
     types: [published]
   workflow_dispatch:
