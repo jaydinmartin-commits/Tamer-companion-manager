@@ -14,23 +14,12 @@
   </header>
 
   <div class="tcm-toolbar">
-    <button type="button" data-action="addCompanion"><i class="fa-solid fa-plus"></i> Add Companion</button>
-    <button type="button" data-action="refresh"><i class="fa-solid fa-rotate"></i> Refresh</button>
-    <button type="button" data-action="openTamer"><i class="fa-solid fa-user"></i> Tamer Sheet</button>
+    <button type="button" data-action="addCompanion"><i class="fa-solid fa-plus"></i><span>Add Companion</span></button>
+    <button type="button" data-action="refresh"><i class="fa-solid fa-rotate"></i><span>Refresh</span></button>
+    <button type="button" data-action="openTamer"><i class="fa-solid fa-user"></i><span>Tamer Sheet</span></button>
   </div>
 
-  <div class="tcm-rule-note">
-    <i class="fa-solid fa-circle-info"></i>
-    <span>Companions remain normal Foundry Actors. Normally only one companion is summoned at a time.</span>
-  </div>
-
-  <div class="tcm-soul-bond">
-    <span><i class="fa-solid fa-heart-pulse"></i> Soul Bond</span>
-    <strong>{{soulBond.current}} / {{soulBond.max}}</strong>
-    <small>Healing remaining. Soul Bond is offered automatically when you finish a Short Rest.</small>
-  </div>
-
-  <div class="tcm-companion-grid">
+    <div class="tcm-companion-grid">
     {{#each companions}}
       <article class="tcm-card {{#if summoned}}is-summoned{{/if}}">
         <div class="tcm-card-image">
@@ -57,22 +46,22 @@
           <div class="tcm-improvements">
   <div><span>Improvements</span><strong>{{progression.chosen}} / {{progression.target}}</strong></div>
   <button type="button" data-action="trainCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}} {{#if progression.target}}{{else}}disabled{{/if}}>
-    <i class="fa-solid fa-graduation-cap"></i> Choose Improvement
+    <i class="fa-solid fa-graduation-cap"></i><span>Choose Improvement</span>
   </button>
 </div>
 
           <div class="tcm-actions">
             <button type="button" data-action="openCompanion" data-index="{{index}}" {{#unless linked}}disabled{{/unless}}>
-              <i class="fa-solid fa-file-lines"></i> Manage
+              <i class="fa-solid fa-file-lines"></i><span>Manage</span>
             </button>
 
             {{#if summoned}}
               <button type="button" data-action="dismissCompanion" data-index="{{index}}" class="primary">
-                <i class="fa-solid fa-box"></i> Dismiss
+                <i class="fa-solid fa-box"></i><span>Dismiss</span>
               </button>
             {{else}}
               <button type="button" data-action="summonCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}}>
-                <i class="fa-solid fa-wand-sparkles"></i> Summon
+                <i class="fa-solid fa-wand-sparkles"></i><span>Summon</span>
               </button>
             {{/if}}
 
@@ -101,8 +90,22 @@
     {{/unless}}
   </div>
 
+  <div class="tcm-bottom-info">
+    <div class="tcm-rule-note">
+      <i class="fa-solid fa-circle-info"></i>
+      <span>Companions remain normal Foundry Actors. Normally only one companion is summoned at a time.</span>
+    </div>
+    <div class="tcm-soul-bond">
+      <div class="tcm-soul-bond-heading">
+        <span><i class="fa-solid fa-heart-pulse"></i><strong>Soul Bond</strong></span>
+        <strong>{{soulBond.current}} / {{soulBond.max}}</strong>
+      </div>
+      <small>Healing remaining. Soul Bond is offered automatically when you finish a Short Rest.</small>
+    </div>
+  </div>
+
   <footer class="tcm-footer">
     <span><i class="fa-solid fa-database"></i> Relationship data is stored on the Tamer Actor.</span>
-    <span>V0.1.28</span>
+    <span>V0.1.29</span>
   </footer>
 </section>
