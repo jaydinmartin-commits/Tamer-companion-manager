@@ -72,10 +72,10 @@
     {{/each}}
 
     {{#each pocketFamily.empty}}
-      <article class="tcm-empty-slot">
+      <article class="tcm-empty-slot tcm-drop-zone">
         <i class="fa-solid fa-plus"></i>
         <span>Empty Pocket Family Slot</span>
-        <small>Use “Add Companion” to bond an Actor.</small>
+        <small>Drag an Actor here to bond it.</small>
       </article>
     {{/each}}
 
@@ -83,13 +83,13 @@
       <div class="tcm-empty-state">
         <i class="fa-solid fa-paw"></i>
         <h3>No Companions Linked</h3>
-        <p>Use <strong>Add Companion</strong> to link an existing Foundry Actor.</p>
+        <p>Drag an Actor onto an empty Pocket Family slot, or use <strong>Add Companion</strong>.</p>
       </div>
     {{/unless}}
   </div>
 
   <footer class="tcm-footer">
     <span><i class="fa-solid fa-database"></i> Relationship data is stored on the Tamer Actor.</span>
-    <span>V0.1.0</span>
+    <span>V0.1.7</span>
   </footer>
 </section>
