@@ -231,19 +231,18 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     // DOM only when their level is available, but are hidden until their
     // prerequisite is selected. This lets dependent improvements appear
     // immediately when their prerequisite is chosen.
-    const visibleGroups = [...groups.entries()].map(([treeName, entries]) => [
-      treeName,
-      entries.filter(({ item }) => {
-        const prereq = this.parseImprovementPrerequisites(item);
-        return selected.has(item.uuid) || !prereq.level || level >= prereq.level;
-      })
-    ]).filter(([, entries]) => entries.length);
+    // Universal Monster Trainer and bespoke improvements share one choice list.
+    const mergedEntries = [...groups.values()].flat();
 
-    const groupHtml = visibleGroups.map(([treeName, entries]) => `
-      <section class="tcm-advancement-group">
-        <h3>${esc(treeName)}</h3>
+    const visibleEntries = mergedEntries.filter(({ item }) => {
+      const prereq = this.parseImprovementPrerequisites(item);
+      return !prereq.freeOnTaming && (!prereq.level || level >= prereq.level);
+    });
+
+    const groupHtml = `
+      <section class="tcm-advancement-group tcm-unified-improvement-group">
         <div class="tcm-advancement-options">
-          ${entries.sort((a,b) => a.item.name.localeCompare(b.item.name)).map(({item}) => {
+          ${visibleEntries.sort((a,b) => a.item.name.localeCompare(b.item.name)).map(({item}) => {
             const uuid = item.uuid;
             const prereq = this.parseImprovementPrerequisites(item);
             const eligibility = this.getImprovementEligibility(item, actor, level, selectedUuids, optionsByName);
@@ -267,7 +266,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
               </label>`;
           }).join("")}
         </div>
-      </section>`).join("");
+      </section>`;
 
 
     const content = `
