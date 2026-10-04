@@ -79,33 +79,23 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static getImprovementDescription(item) {
     const raw = this.getImprovementDescriptionHTML(item);
     if (!raw) return "";
-    return raw
-      .replace(/<br\\s*\\/?\\s*>/gi, "\\n")
-      .replace(/<\\/(?:p|div|li|h[1-6])>/gi, "\\n")
-      .replace(/<[^>]*>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/\\s+/g, " ")
-      .trim();
+    return raw.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\\s+/g, " ").trim();
   }
 
   static parseImprovementPrerequisites(item) {
     const text = this.getImprovementDescription(item);
-    const match = text.match(/\\bPrerequisite\\s*:\\s*([^.!?\\n]+)/i);
+    const match = text.match(/Prerequisite\s*:\s*([^\n.]+)/i);
     if (!match) return { text: "", level: 0, names: [] };
-
-    const raw = match[1].trim();
-    const levelMatch = raw.match(/\\b(\\d+)(?:st|nd|rd|th)?-level\\s+tamer\\b/i)
-      ?? raw.match(/\\btamer(?:'s|’s)?\\s+level\\s+(\\d+)\\b/i);
+    const raw = match[1].replace(/<[^>]*>/g, " ").trim();
+    const levelMatch = raw.match(/(?:tamer\\s+)?(?:level\\s*)?(\\d+)(?:st|nd|rd|th)?-?level\\s+tamer/i)
+      ?? raw.match(/(\\d+)(?:st|nd|rd|th)-level\\s+tamer/i);
     const level = levelMatch ? Number(levelMatch[1]) : 0;
-
     const names = raw
-      .replace(/\\b\\d+(?:st|nd|rd|th)?-level\\s+tamer\\b/ig, "")
-      .replace(/\\btamer(?:'s|’s)?\\s+level\\s+\\d+\\b/ig, "")
+      .replace(/(?:\\d+)(?:st|nd|rd|th)-level\\s+tamer/ig, "")
+      .replace(/tamer\\s+level\\s+\\d+/ig, "")
       .split(/,|\\band\\b/i)
       .map(x => x.trim())
       .filter(x => x && !/^—$/.test(x) && !/^become(?: a)? tamer(?:’s|')? companion$/i.test(x));
-
     return { text: raw, level, names };
   }
 
@@ -141,16 +131,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     if (!options.length) return ui.notifications.info(`${actor.name} has no registered improvement Items available.`);
 
-    // Hide improvements whose Tamer-level prerequisite is not yet met.
-    // Already-selected improvements remain visible so they can still be removed.
-    const visibleOptions = options.filter(({ item }) => {
-      if (selected.has(item.uuid)) return true;
-      const prereq = this.parseImprovementPrerequisites(item);
-      return !prereq.level || level >= prereq.level;
-    });
-
     const groups = new Map();
-    for (const entry of visibleOptions) {
+    for (const entry of options) {
       if (!groups.has(entry.tree)) groups.set(entry.tree, []);
       groups.get(entry.tree).push(entry);
     }
@@ -172,12 +154,13 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             const locked = !selected.has(uuid) && !eligibility.eligible;
             const prereqData = encodeURIComponent(JSON.stringify(prereq));
             return `
-              <label class="tcm-advancement-option${locked ? " is-locked" : ""}" data-tooltip-html="${esc(this.getImprovementDescriptionHTML(item) || `<p>${esc(item.name)}</p>`)}" data-tooltip-direction="RIGHT">
+              <label class="tcm-advancement-option${locked ? " is-locked" : ""}" data-tooltip-html="${esc(this.getImprovementDescriptionHTML(item) || "<p>" + esc(item.name) + "</p>")}" data-tooltip-direction="RIGHT">
                 <input type="checkbox" name="improvement" value="${esc(uuid)}"${selected.has(uuid) ? " checked" : ""}${locked ? " disabled" : ""} data-prerequisites="${esc(prereqData)}">
                 <span class="tcm-advancement-check"></span>
                 <img class="tcm-advancement-icon" src="${esc(item.img || "icons/svg/item-bag.svg")}" alt="">
                 <span class="tcm-advancement-text">
                   <strong>${esc(item.name)}</strong>
+                  ${description ? `<small>${esc(description)}</small>` : ""}
                   ${eligibility.missing.length ? `<em class="tcm-improvement-prerequisite">Requires: ${esc(eligibility.missing.join(", "))}</em>` : ""}
                 </span>
               </label>`;
@@ -200,7 +183,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const result = await foundry.applications.api.DialogV2.wait({
       classes: ["tcm-improvement-dialog"],
       window: { title: `Choose Improvement — ${actor.name}`, resizable: true },
-      position: { width: 760, height: 680, minWidth: 500, minHeight: 360 },
+      position: { width: 760, height: 680 },
       content,
       buttons: [
         { action: "save", label: "Save Changes", default: true, callback: (event, button) => {
@@ -245,7 +228,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           input.addEventListener("change", updateCount);
         }
         updateCount();
-        if (game.tooltip?.activateListeners) game.tooltip.activateListeners(root);
       }
     });
 
