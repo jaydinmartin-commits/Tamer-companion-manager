@@ -1,6 +1,8 @@
 name: Package Foundry Release
 
 on:
+  push:
+    branches: [main]
   release:
     types: [published]
   workflow_dispatch:
@@ -15,27 +17,54 @@ permissions:
 
 jobs:
   package:
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release-package]')
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Determine release tag
+        id: release
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v0.1.1"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
       - name: Build Foundry package ZIP
         shell: bash
         run: |
-          TAG="${{ github.event.release.tag_name || inputs.tag }}"
-          VERSION="${TAG#v}"
+          TAG="${{ steps.release.outputs.tag }}"
+          VERSION="${{ steps.release.outputs.version }}"
           mkdir -p dist
           zip -r "dist/tamer-companion-manager-v${VERSION}.zip" \
             module.json scripts templates styles macros README.md
+
+      - name: Ensure GitHub release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "Tamer Companion Manager $TAG" \
+              --generate-notes
+          fi
 
       - name: Upload package to GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          TAG="${{ github.event.release.tag_name || inputs.tag }}"
-          VERSION="${TAG#v}"
-          gh release upload "${TAG}" \
+          TAG="${{ steps.release.outputs.tag }}"
+          VERSION="${{ steps.release.outputs.version }}"
+          gh release upload "$TAG" \
             "dist/tamer-companion-manager-v${VERSION}.zip" \
             --clobber
