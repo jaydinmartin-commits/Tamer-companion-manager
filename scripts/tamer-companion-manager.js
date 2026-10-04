@@ -4,9 +4,17 @@ const FLAG_KEY = "companions";
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
-  constructor(tamer, options = {}) {
-    super(options);
-    this.tamer = tamer;
+  constructor(tamer = null, options = {}) {
+    // Foundry settings menus instantiate the registered Application class
+    // with the Application options object as the first argument.
+    // Our normal launcher passes an Actor instead.
+    const isActor = tamer?.documentName === "Actor" || tamer?.documentName === "Actor5e";
+    const actualOptions = isActor ? options : (tamer ?? options ?? {});
+    super(actualOptions);
+    this.tamer = isActor
+      ? tamer
+      : game?.actors?.contents?.find(a => TamerCompanionManager.isTamer(a) && (a.isOwner || game.user.isGM))
+        ?? null;
   }
 
   static DEFAULT_OPTIONS = {
