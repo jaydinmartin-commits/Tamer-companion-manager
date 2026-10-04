@@ -29,44 +29,24 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static getMaxCompanionSize(level) { if (level >= 13) return "Huge"; if (level >= 9) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
   static getMaxCompanionCR(level) { if (level >= 19) return 6; if (level >= 16) return 5; if (level >= 13) return 4; if (level >= 10) return 3; if (level >= 7) return 2; if (level >= 4) return 1; return 0.5; }
-  static isMonsterTrainerImprovement(item) {
-    return String(item?.type ?? "").toLowerCase() === "monster-trainer-improvement"
-      || String(item?.system?.type ?? "").toLowerCase() === "monster-trainer-improvement"
-      || String(item?.system?.identifier ?? "").toLowerCase() === "monster-trainer-improvement";
-  }
-  static async getStandardImprovementItems() {
+  static getStandardImprovementSources() { return foundry.utils.deepClone(game.settings.get(MODULE_ID, "standardImprovementSources") ?? []); }
+  static async resolveSources(sources) {
     const found = new Map();
-    for (const item of game.items?.contents ?? []) if (this.isMonsterTrainerImprovement(item)) found.set(item.uuid, item);
-    for (const pack of game.packs ?? []) {
-      if (pack.documentName !== "Item") continue;
-      try {
-        const index = await pack.getIndex();
-        for (const entry of index) {
-          const type = String(entry.type ?? entry.system?.type ?? entry.system?.identifier ?? "").toLowerCase();
-          if (!type.includes("monster-trainer-improvement")) continue;
-          const item = await fromUuid(`Compendium.${pack.collection}.${entry._id}`).catch(() => null);
-          if (item && this.isMonsterTrainerImprovement(item)) found.set(item.uuid, item);
-        }
-      } catch (error) { console.warn(`[Tamer Companion Manager] Could not scan Item compendium ${pack.collection}.`, error); }
-    }
-    return [...found.values()].sort((a,b)=>a.name.localeCompare(b.name));
+    const visit = async uuid => {
+      const doc = await fromUuid(uuid).catch(() => null);
+      if (!doc) return;
+      if (doc.documentName === "Item") { found.set(doc.uuid, doc); return; }
+      if (doc.documentName === "Folder") for (const child of doc.contents ?? []) await visit(child.uuid);
+    };
+    for (const source of sources ?? []) await visit(source.uuid ?? source);
+    return [...found.values()].sort((a,b) => a.name.localeCompare(b.name));
   }
   static getImprovementRegistry() { return foundry.utils.deepClone(game.settings.get(MODULE_ID, "improvementTrees") ?? []); }
   static async findBespokeTree(actor) {
     const name=String(actor?.name??"").trim().toLowerCase();
     return name ? this.getImprovementRegistry().find(t=>String(t.matchName??"").trim().toLowerCase()===name) ?? null : null;
   }
-  static async resolveTreeItems(tree) {
-    const found=new Map();
-    const visit=async uuid=>{
-      const doc=await fromUuid(uuid).catch(()=>null);
-      if(!doc) return;
-      if(doc.documentName==="Item" && this.isMonsterTrainerImprovement(doc)){found.set(doc.uuid,doc);return;}
-      if(doc.documentName==="Folder") for(const child of doc.contents??[]) await visit(child.uuid);
-    };
-    for(const source of tree?.sources??[]) await visit(source.uuid??source);
-    return [...found.values()].sort((a,b)=>a.name.localeCompare(b.name));
-  }
+  static async resolveTreeItems(tree) { return this.resolveSources(tree?.sources ?? []); }
   static async getAvailableImprovements(actor,record) {
     const standard=await this.getStandardImprovementItems(), tree=await this.findBespokeTree(actor), bespoke=tree?await this.resolveTreeItems(tree):[];
     const owned=new Set((record?.improvements??[]).map(x=>String(x.sourceUuid??"")));
@@ -83,7 +63,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const result=await foundry.applications.api.DialogV2.input({window:{title:`Choose Improvement — ${actor.name}`},content:`<div class="tcm-training-dialog"><p>Select an available Monster Trainer Improvement.</p><div class="form-group"><label>Improvement</label><select name="improvement">${html}</select></div></div>`,ok:{label:"Choose Improvement"}});
     if(!result?.improvement)return false;
     const source=await fromUuid(result.improvement).catch(()=>null);
-    if(!source||!this.isMonsterTrainerImprovement(source))return ui.notifications.error("The selected improvement could not be resolved.");
+    if(!source||source.documentName!=="Item")return ui.notifications.error("The selected improvement could not be resolved.");
     const data=source.toObject(); delete data._id;
     const created=await actor.createEmbeddedDocuments("Item",[data]); if(!created?.length)return false;
     const records=this.records(tamer),target=records.find(r=>r.id===record.id); if(!target)return false;
@@ -187,20 +167,28 @@ class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(Appli
   static async _onRemoveTree(event,target){const trees=TamerCompanionManager.getImprovementRegistry().filter(t=>t.id!==target.dataset.id);await game.settings.set(MODULE_ID,"improvementTrees",trees);await this.render({force:true});}
   async _onRender(context,options){
     await super._onRender(context,options);if(!this.element)return;
-    const drop=new foundry.applications.ux.DragDrop({dragSelector:null,dropSelector:".tcm-tree-drop-zone",permissions:{drop:()=>Boolean(this.editing)},callbacks:{drop:async event=>{
-      event.preventDefault();if(!this.editing)return;
-      const data=TextEditor.getDragEventData(event);if(!["Item","Folder"].includes(data?.type))return ui.notifications.warn("Drop Monster Trainer Improvement Items or folders here.");
+    const drop=new foundry.applications.ux.DragDrop({dragSelector:null,dropSelector:".tcm-tree-drop-zone, .tcm-standard-drop-zone",permissions:{drop:()=>true},callbacks:{drop:async event=>{
+      event.preventDefault();
+      const data=TextEditor.getDragEventData(event);if(!["Item","Folder"].includes(data?.type))return ui.notifications.warn("Drop an Item or Folder here.");
       const doc=data.uuid?await fromUuid(data.uuid).catch(()=>null):null;if(!doc)return ui.notifications.error("The dropped document could not be resolved.");
-      if(doc.documentName==="Item"&&!TamerCompanionManager.isMonsterTrainerImprovement(doc))return ui.notifications.warn("That Item is not a Monster Trainer Improvement.");
-      this.editing.sources??=[];if(!this.editing.sources.some(x=>(x.uuid??x)===doc.uuid))this.editing.sources.push({uuid:doc.uuid,name:doc.name,type:doc.documentName});
+      const standardZone=event.target.closest(".tcm-standard-drop-zone");
+      if(standardZone){
+        const sources=TamerCompanionManager.getStandardImprovementSources();
+        if(!sources.some(x=>(x.uuid??x)===doc.uuid))sources.push({uuid:doc.uuid,name:doc.name,type:doc.documentName});
+        await game.settings.set(MODULE_ID,"standardImprovementSources",sources);
+      } else {
+        if(!this.editing)return;
+        this.editing.sources??=[];if(!this.editing.sources.some(x=>(x.uuid??x)===doc.uuid))this.editing.sources.push({uuid:doc.uuid,name:doc.name,type:doc.documentName});
+      }
       await this.render({force:true});
-    }}});
+    }});
     drop.bind(this.element);
   }
 }
 
 Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "improvementTrees", { scope: "world", config: false, type: Array, default: [] });
+  game.settings.register(MODULE_ID, "standardImprovementSources", { scope: "world", config: false, type: Array, default: [] });
   game.settings.registerMenu(MODULE_ID, "openImprovementRegistry", { name: "Bespoke Companion Improvements", label: "Register Improvements", hint: "Register additional improvement trees for bespoke companions.", icon: "fa-solid fa-tree", type: TamerCompanionImprovementRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openManager", { name: "Tamer Companion Manager", label: "Open Companion Manager", hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.", icon: "fa-solid fa-paw", type: TamerCompanionManager, restricted: false });
   game.tamerCompanionManager = { open: actor => TamerCompanionManager.open(actor), isTamer: actor => TamerCompanionManager.isTamer(actor), getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor), getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level) };
