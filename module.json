@@ -2,11 +2,11 @@
   "id": "tamer-companion-manager",
   "title": "Tamer Companion Manager",
   "description": "A Foundry VTT companion management interface for Tamer-style classes, initially built around the Heliana's Guide to Monster Hunting Tamer.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "authors": [{ "name": "Jaydin" }],
   "compatibility": { "minimum": "14", "verified": "14" },
   "esmodules": ["scripts/tamer-companion-manager.js"],
   "styles": ["styles/tamer-companion-manager.css"],
   "manifest": "https://raw.githubusercontent.com/jaydinmartin-commits/Tamer-companion-manager/main/module.json",
-  "download": "https://github.com/jaydinmartin-commits/Tamer-companion-manager/releases/download/v0.1.0/tamer-companion-manager-v0.1.0.zip"
+  "download": "https://github.com/jaydinmartin-commits/Tamer-companion-manager/releases/download/v0.1.1/tamer-companion-manager-v0.1.1.zip"
 }
