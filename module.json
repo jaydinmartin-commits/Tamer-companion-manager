@@ -13,8 +13,7 @@
     "verified": "14"
   },
   "esmodules": [
-    "scripts/tamer-companion-manager.js",
-    "scripts/tamer-companion-manager-v0.1.42-fixes.js"
+    "scripts/tamer-companion-manager.js"
   ],
   "styles": [
     "styles/tamer-companion-manager.css"
