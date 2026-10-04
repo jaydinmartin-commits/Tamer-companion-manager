@@ -38,6 +38,20 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare release manifest
+        shell: bash
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          VERSION="${{ steps.release.outputs.version }}"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("module.json")
+          data = json.loads(p.read_text())
+          data["version"] = "${{ steps.release.outputs.version }}"
+          data["download"] = "https://github.com/jaydinmartin-commits/Tamer-companion-manager/releases/download/${{ steps.release.outputs.tag }}/tamer-companion-manager-v${{ steps.release.outputs.version }}.zip"
+          p.write_text(json.dumps(data, indent=2) + "\n")
+          PY
       - name: Build Foundry package ZIP
         shell: bash
         run: |
