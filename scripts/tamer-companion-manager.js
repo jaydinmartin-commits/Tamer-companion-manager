@@ -158,83 +158,169 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       return false;
     }
 
-    // Ensure Foundry's Token layer owns the canvas interaction while the
-    // native placement workflow is running. Restore the previous layer after.
     const previousLayer = canvas.activeLayer;
     if (canvas.tokens !== previousLayer) canvas.tokens.activate();
 
+    const tokenDoc = await actor.getTokenDocument({}, { parent: canvas.scene });
     const grid = canvas.grid;
-    const tamerCenter = tamerToken.center;
     const range = 30;
     const closeRange = 5;
 
-    const tokenDoc = await actor.getTokenDocument({}, { parent: canvas.scene });
-    // Foundry's native placement API normally confirms on left-click.
-    // In this setup the preview receives pointer movement, but the normal
-    // TokenLayer click dispatch is not reaching the placement workflow.
-    // Forward the canvas pointer event directly to Foundry's own confirmation
-    // handler while placement is active.
-    let placementActive = true;
-    const placementClickFallback = event => {
-      if (!placementActive || event.button !== 0) return;
-      setTimeout(() => {
-        if (!placementActive || !canvas.tokens?._placementContext) return;
-        canvas.tokens._onClickLeft(event);
-      }, 0);
-    };
-    canvas.stage.on("pointerdown", placementClickFallback);
+    // This is deliberately independent of TokenLayer#placeTokens.
+    // Foundry's public Token placement API is currently producing a working
+    // preview in this module, but its confirmation event is not reaching the
+    // workflow. We therefore own the pointer interaction and only use public
+    // Token/Scene document APIs to create the final Token.
+    let preview = null;
+    let finished = false;
+    let lastPosition = { x: tokenDoc.x, y: tokenDoc.y };
 
-    let placed;
+    const getPointerPosition = () => {
+      const point = canvas.mousePosition;
+      if (!point) return null;
+
+      const widthPx = tokenDoc.width * grid.sizeX;
+      const heightPx = tokenDoc.height * grid.sizeY;
+      const raw = {
+        x: point.x - widthPx / 2,
+        y: point.y - heightPx / 2
+      };
+
+      return tokenDoc.getSnappedPosition(raw);
+    };
+
+    const updatePreview = () => {
+      const position = getPointerPosition();
+      if (!position) return;
+
+      lastPosition = position;
+      tokenDoc.updateSource(position);
+
+      if (preview) {
+        preview.document.updateSource(position);
+        preview.refresh();
+      }
+    };
+
+    const getValidation = () => {
+      const widthPx = tokenDoc.width * grid.sizeX;
+      const heightPx = tokenDoc.height * grid.sizeY;
+      const center = {
+        x: lastPosition.x + widthPx / 2,
+        y: lastPosition.y + heightPx / 2
+      };
+
+      const distance = grid.measureDistance(tamerToken.center, center);
+      if (distance > range) {
+        return {
+          valid: false,
+          message: "The companion must be summoned within 30 feet of the Tamer."
+        };
+      }
+
+      const withinCloseRange = distance <= closeRange;
+      const visible = canvas.visibility?.testVisibility(center, { object: tamerToken }) ?? true;
+
+      if (!withinCloseRange && !visible) {
+        return {
+          valid: false,
+          message: "The companion must be within 30 feet and within the Tamer's line of sight, or within 5 feet of the Tamer."
+        };
+      }
+
+      return { valid: true };
+    };
+
+    updatePreview();
+
     try {
-      placed = await canvas.tokens.placeTokens([tokenDoc.toObject()], {
-      allowRotation: false,
-      preConfirm: ({ document }) => {
-        const center = {
-          x: document.x + (document.width * grid.sizeX) / 2,
-          y: document.y + (document.height * grid.sizeY) / 2
+      // Build a real Token placeable as a visual preview, but do not create
+      // anything in the Scene until the user confirms.
+      preview = canvas.tokens.createObject(tokenDoc);
+      await preview.draw();
+      preview.alpha = 0.65;
+
+      updatePreview();
+
+      const result = await new Promise(resolve => {
+        const onMove = () => updatePreview();
+
+        const onPointerDown = async event => {
+          if (finished || event.button !== 0) return;
+
+          const validation = getValidation();
+          if (!validation.valid) {
+            ui.notifications.warn(validation.message);
+            return;
+          }
+
+          finished = true;
+          canvas.stage.off("pointermove", onMove);
+          canvas.stage.off("pointerdown", onPointerDown);
+          window.removeEventListener("keydown", onKeyDown, true);
+
+          try {
+            const data = tokenDoc.toObject();
+            delete data._id;
+
+            const [created] = await canvas.scene.createEmbeddedDocuments("Token", [data], {
+              renderSheet: false
+            });
+            resolve(created ?? null);
+          } catch (error) {
+            console.error("[Tamer Companion Manager] Failed to create summoned Token.", error);
+            ui.notifications.error("The companion could not be placed. See the browser console for details.");
+            resolve(null);
+          }
         };
 
-        const distance = grid.measureDistance(tamerCenter, center);
-        if (distance > range) {
-          ui.notifications.warn("The companion must be summoned within 30 feet of the Tamer.");
-          return false;
-        }
+        const onKeyDown = event => {
+          if (finished) return;
+          if (event.key !== "Escape" && event.key !== "Esc") return;
 
-        const withinCloseRange = distance <= closeRange;
-        const visible = canvas.visibility?.testVisibility(center, { object: tamerToken }) ?? true;
+          finished = true;
+          canvas.stage.off("pointermove", onMove);
+          canvas.stage.off("pointerdown", onPointerDown);
+          window.removeEventListener("keydown", onKeyDown, true);
+          resolve(null);
+        };
 
-        if (!withinCloseRange && !visible) {
-          ui.notifications.warn("The companion must be within 30 feet and within the Tamer's line of sight, or within 5 feet of the Tamer.");
-          return false;
-        }
+        canvas.stage.on("pointermove", onMove);
+        canvas.stage.on("pointerdown", onPointerDown);
+        window.addEventListener("keydown", onKeyDown, true);
 
-        return true;
+        updatePreview();
+      });
+
+      if (!result) {
+        ui.notifications.info("Summoning cancelled.");
+        return false;
       }
-    });
 
+      const recordsAfterPlacement = this.records(tamer);
+      const target = recordsAfterPlacement.find(r => r.id === record.id);
+      if (!target) {
+        await result.delete();
+        return false;
+      }
+
+      target.tokenUuid = result.uuid;
+      target.status = "summoned";
+      await this.save(tamer, recordsAfterPlacement);
+
+      ui.notifications.info(`${actor.name} has been summoned.`);
+      return true;
     } finally {
-      placementActive = false;
-      canvas.stage.off("pointerdown", placementClickFallback);
-    }
+      if (!finished) {
+        finished = true;
+      }
 
-    if (!placed.length) {
-      ui.notifications.info("Summoning cancelled.");
+      if (preview) {
+        preview.destroy({ children: true });
+      }
+
       if (previousLayer && previousLayer !== canvas.tokens) previousLayer.activate();
-      return false;
     }
-
-    if (previousLayer && previousLayer !== canvas.tokens) previousLayer.activate();
-
-    const recordsAfterPlacement = this.records(tamer);
-    const target = recordsAfterPlacement.find(r => r.id === record.id);
-    if (!target) return false;
-
-    target.tokenUuid = placed[0].uuid;
-    target.status = "summoned";
-    await this.save(tamer, recordsAfterPlacement);
-
-    ui.notifications.info(`${actor.name} has been summoned.`);
-    return true;
   }
 
   static async dismiss(tamer, record) {
