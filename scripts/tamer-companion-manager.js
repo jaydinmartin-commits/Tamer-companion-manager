@@ -9,6 +9,18 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     this.tamer = options.tamer
       ?? game?.actors?.contents?.find(a => TamerCompanionManager.isTamer(a) && (a.isOwner || game.user.isGM))
       ?? null;
+
+    this._tcmDragDrop = new foundry.applications.ux.DragDrop({
+      dragSelector: null,
+      dropSelector: ".tcm-drop-zone",
+      permissions: {
+        drop: () => this._canAcceptCompanionDrop()
+      },
+      callbacks: {
+        drop: event => this._onDropCompanion(event),
+        dragover: event => this._onDragOverCompanion(event)
+      }
+    });
   }
 
   static DEFAULT_OPTIONS = {
@@ -206,42 +218,68 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   }
 
-  async _onRefresh() {
-    await this.render({ force: true });
-  }
-
-  async _onAddCompanion() {
+  _canAcceptCompanionDrop() {
+    if (!this.tamer || !TamerCompanionManager.isTamer(this.tamer)) return false;
     const records = TamerCompanionManager.records(this.tamer);
     const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
-    if (records.length >= max) return ui.notifications.warn("No Pocket Family slot is available.");
+    return records.length < max;
+  }
 
-    const available = game.actors.contents
-      .filter(a => a.id !== this.tamer.id && (a.isOwner || game.user.isGM))
-      .filter(a => !records.some(r => r.actorUuid === a.uuid))
-      .sort((a, b) => a.name.localeCompare(b.name));
+  _onDragOverCompanion(event) {
+    if (!this._canAcceptCompanionDrop()) return;
+    event.dataTransfer.dropEffect = "link";
+  }
 
-    if (!available.length) return ui.notifications.warn("No available Actors were found.");
+  async _onDropCompanion(event) {
+    event.preventDefault();
 
-    const options = available.map(a =>
-      `<option value="${a.uuid}">${foundry.utils.escapeHTML(a.name)}</option>`).join("");
+    if (!this._canAcceptCompanionDrop()) {
+      ui.notifications.warn("No Pocket Family slot is available.");
+      return;
+    }
 
-    const result = await foundry.applications.api.DialogV2.wait({
-      window: { title: "Link Companion" },
-      content: `<form><div class="form-group"><label>Companion Actor</label><select name="actorUuid">${options}</select></div></form>`,
-      buttons: [
-        { action: "cancel", label: "Cancel" },
-        {
-          action: "link",
-          label: "Link Companion",
-          default: true,
-          callback: (event, button, dialog) => dialog.element.querySelector("[name='actorUuid']")?.value
-        }
-      ]
-    });
+    const data = TextEditor.getDragEventData(event);
+    if (data?.type !== "Actor") {
+      ui.notifications.warn("Only Actor documents can be added as companions.");
+      return;
+    }
 
-    if (!result) return;
-    const actor = await fromUuid(result).catch(() => null);
-    if (!actor) return ui.notifications.error("Could not resolve that Actor.");
+    let actor = data.uuid ? await fromUuid(data.uuid).catch(() => null) : null;
+    if (!actor && globalThis.Actor?.implementation?.fromDropData) {
+      actor = await Actor.implementation.fromDropData(data).catch(() => null);
+    }
+
+    if (!actor) {
+      ui.notifications.error("The dropped Actor could not be resolved.");
+      return;
+    }
+
+    await this._linkCompanion(actor);
+  }
+
+  async _linkCompanion(actor) {
+    const records = TamerCompanionManager.records(this.tamer);
+    const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
+
+    if (records.length >= max) {
+      ui.notifications.warn("No Pocket Family slot is available.");
+      return false;
+    }
+
+    if (actor.id === this.tamer.id || actor.uuid === this.tamer.uuid) {
+      ui.notifications.warn("The Tamer cannot be linked as their own companion.");
+      return false;
+    }
+
+    if (!(actor.isOwner || game.user.isGM)) {
+      ui.notifications.warn("You do not have permission to use that Actor as a companion.");
+      return false;
+    }
+
+    if (records.some(r => r.actorUuid === actor.uuid)) {
+      ui.notifications.warn(`${actor.name} is already linked to this Tamer.`);
+      return false;
+    }
 
     records.push({
       id: foundry.utils.randomID(),
@@ -257,7 +295,64 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     });
 
     await TamerCompanionManager.save(this.tamer, records);
+    ui.notifications.info(`${actor.name} has been bonded as a companion.`);
     await this.render({ force: true });
+    return true;
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    if (this.element) this._tcmDragDrop.bind(this.element);
+  }
+
+  async _onRefresh() {
+    await this.render({ force: true });
+  }
+
+  async _onAddCompanion() {
+    const records = TamerCompanionManager.records(this.tamer);
+    const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
+
+    if (records.length >= max) {
+      return ui.notifications.warn("No Pocket Family slot is available.");
+    }
+
+    const available = game.actors.contents
+      .filter(a => a.id !== this.tamer.id && (a.isOwner || game.user.isGM))
+      .filter(a => !records.some(r => r.actorUuid === a.uuid))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    if (!available.length) {
+      return ui.notifications.warn("No available Actors were found.");
+    }
+
+    const options = available
+      .map(a => `<option value="${foundry.utils.escapeHTML(a.uuid)}">${foundry.utils.escapeHTML(a.name)}</option>`)
+      .join("");
+
+    const result = await foundry.applications.api.DialogV2.input({
+      window: { title: "Link Companion" },
+      content: `
+        <div class="form-group">
+          <label for="tcm-companion-actor">Companion Actor</label>
+          <select id="tcm-companion-actor" name="actorUuid">
+            ${options}
+          </select>
+        </div>
+      `,
+      ok: {
+        label: "Link Companion"
+      }
+    });
+
+    if (!result?.actorUuid) return;
+
+    const actor = await fromUuid(result.actorUuid).catch(() => null);
+    if (!actor) {
+      return ui.notifications.error("Could not resolve that Actor.");
+    }
+
+    await this._linkCompanion(actor);
   }
 
   async _onOpenCompanion(event, target) {
