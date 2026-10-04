@@ -10,7 +10,7 @@ on:
       tag:
         description: Release tag to package (for example, v0.1.0)
         required: true
-        default: v0.1.6
+        default: v0.1.7
 
 permissions:
   contents: write
@@ -32,7 +32,8 @@ jobs:
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ inputs.tag }}"
           else
-            TAG="v0.1.6"
+            VERSION="$(node -p 'require(\"./module.json\").version')"
+            TAG="v${VERSION}"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
