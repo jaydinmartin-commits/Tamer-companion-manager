@@ -69,3 +69,10 @@ Packaging trigger for v0.1.31.
 
 
 <!-- v0.1.42 prerequisite parser refresh -->
+
+
+## Release 0.1.49
+- Add Companion opens a searchable browser backed by GM-configured Actor compendiums.
+- GM-only Configure Companion Sources menu controls which Actor compendiums are available.
+- Selected compendium creatures are imported into the World and bonded through the existing companion-linking flow.
+- Existing Actor drag-and-drop companion linking remains available.
