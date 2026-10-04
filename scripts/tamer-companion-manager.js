@@ -228,6 +228,17 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
     if (!Array.isArray(result)) return false;
     const desired = new Set(result);
+    const availableByUuid = new Map(options.map(({ item }) => [item.uuid, item]));
+    const availableByName = new Map(options.map(({ item }) => [String(item.name).trim().toLowerCase(), item.uuid]));
+    for (const sourceUuid of desired) {
+      const item = availableByUuid.get(sourceUuid);
+      if (!item) continue;
+      const eligibility = this.getImprovementEligibility(item, actor, level, desired, availableByName);
+      if (!eligibility.eligible) {
+        ui.notifications.warn(`${item.name} cannot be selected. Missing prerequisite: ${eligibility.missing.join(", ")}.`);
+        return false;
+      }
+    }
     const current = new Map((record?.improvements ?? []).map(entry => [String(entry.sourceUuid ?? ""), entry]));
     const records = this.records(tamer);
     const target = records.find(r => r.id === record.id);
