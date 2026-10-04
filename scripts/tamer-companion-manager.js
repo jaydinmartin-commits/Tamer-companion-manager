@@ -127,28 +127,43 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       };
     }
 
-    // The Heliana/Tamer Items store prerequisites in their description text,
-    // e.g. "Prerequisite: 5th-level tamer, Growth I".
-    const text = this.getImprovementDescription(item);
-    const match = text.match(/Prerequisite\s*:\s*([^\n.]+)/i);
-    if (!match) return { text: "", level: 0, names: [] };
+    // The source stores prerequisites in the first description paragraph,
+    // e.g. "Prerequisite: 5th-level tamer, Growth I". Stop at the end of
+    // that paragraph so the feature's actual description is never treated
+    // as another prerequisite.
+    const html = this.getImprovementDescriptionHTML(item);
+    const htmlMatch = html.match(
+      /Prerequisite\s*:\s*([\\s\\S]*?)(?:<\\/p>|<br\\s*\\/?>|<\\/li>|$)/i
+    );
 
-    const raw = match[1].trim();
+    let raw = "";
+    if (htmlMatch) {
+      raw = htmlMatch[1]
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/\\s+/g, " ")
+        .trim();
+    } else {
+      const text = this.getImprovementDescription(item);
+      const match = text.match(/Prerequisite\s*:\s*([^\\n.]+)/i);
+      if (!match) return { text: "", level: 0, names: [] };
+      raw = match[1].trim();
+    }
 
-    // Accept the source's normal forms:
-    //   5th-level tamer
-    //   9th-level tamer
-    //   tamer level 9
-    // and tolerate HTML/text normalization that leaves spaces around the hyphen.
+    if (!raw) return { text: "", level: 0, names: [] };
+
     const levelMatch =
       raw.match(/(\\d+)\\s*(?:st|nd|rd|th)?\\s*-?\\s*level\\s+tamer/i) ??
-      raw.match(/tamer\s+level\s+(\d+)/i);
+      raw.match(/tamer\\s+level\\s+(\\d+)/i);
 
     const level = levelMatch ? Number(levelMatch[1]) : 0;
 
     const names = raw
       .replace(/\\d+\\s*(?:st|nd|rd|th)?\\s*-?\\s*level\\s+tamer/ig, "")
-      .replace(/tamer\s+level\s+\d+/ig, "")
+      .replace(/tamer\\s+level\\s+\\d+/ig, "")
       .split(/,|\\band\\b/i)
       .map(x => x.trim())
       .filter(x =>
@@ -210,6 +225,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     // while the actual Tamer level is read from the Tamer's Tamer class Item.
     // Improvements above the current level are hidden; missing named prerequisites
     // remain visible and locked so the player can see what they need.
+    // Level-ineligible improvements are not rendered at all.
+    // Improvements whose named prerequisites are not yet met remain in the
+    // DOM only when their level is available, but are hidden until their
+    // prerequisite is selected. This lets dependent improvements appear
+    // immediately when their prerequisite is chosen.
     const visibleGroups = [...groups.entries()].map(([treeName, entries]) => [
       treeName,
       entries.filter(({ item }) => {
@@ -226,33 +246,35 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             const uuid = item.uuid;
             const prereq = this.parseImprovementPrerequisites(item);
             const eligibility = this.getImprovementEligibility(item, actor, level, selectedUuids, optionsByName);
-            const locked = !selected.has(uuid) && !eligibility.eligible;
+            const initiallyHidden = !selected.has(uuid) && !eligibility.eligible;
             const prereqData = encodeURIComponent(JSON.stringify(prereq));
             const tooltipHtml = this.getImprovementDescriptionHTML(item);
+            const requirementText = prereq.text ? `Requires: ${prereq.text}` : "";
 
             return `
-              <label class="tcm-advancement-option${locked ? " is-locked" : ""}"
-                data-tooltip-html="${esc(tooltipHtml)}"
-                data-tooltip-class="tcm-improvement-tooltip"
-                data-tooltip-direction="RIGHT">
-                <input type="checkbox" name="improvement" value="${esc(uuid)}"${selected.has(uuid) ? " checked" : ""}${locked ? " disabled" : ""} data-prerequisites="${esc(prereqData)}">
+              <label class="tcm-advancement-option${initiallyHidden ? " is-prerequisite-hidden" : ""}"
+                data-tcm-tooltip="${esc(tooltipHtml)}"
+                data-prerequisites="${esc(prereqData)}"
+                ${initiallyHidden ? 'hidden' : ''}>
+                <input type="checkbox" name="improvement" value="${esc(uuid)}"${selected.has(uuid) ? " checked" : ""}${initiallyHidden ? " disabled" : ""}>
                 <span class="tcm-advancement-check"></span>
                 <img class="tcm-advancement-icon" src="${esc(item.img || "icons/svg/item-bag.svg")}" alt="">
                 <span class="tcm-advancement-text">
                   <strong>${esc(item.name)}</strong>
-                  ${eligibility.missing.length ? `<em class="tcm-improvement-prerequisite">Requires: ${esc(eligibility.missing.join(", "))}</em>` : ""}
+                  ${requirementText ? `<em class="tcm-improvement-prerequisite">${esc(requirementText)}</em>` : ""}
                 </span>
               </label>`;
           }).join("")}
         </div>
       </section>`).join("");
 
+
     const content = `
       <div class="tcm-advancement">
         <div class="tcm-advancement-header">
           <div>
             <h2>Choose Improvement</h2>
-            <p>Choose up to <strong>${progression.target}</strong> improvement${progression.target === 1 ? "" : "s"}. Hover over an improvement for its full description. Locked improvements show their prerequisites.</p>
+            <p>Choose up to <strong>${progression.target}</strong> improvement${progression.target === 1 ? "" : "s"}. Hover over an improvement for its full description.</p>
           </div>
           <div class="tcm-advancement-count"><strong class="tcm-selected-count">${selected.size}</strong> / ${progression.target}</div>
         </div>
@@ -279,13 +301,61 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         const root = dialog.element;
         const boxes = [...root.querySelectorAll('input[name="improvement"]')];
         const count = root.querySelector(".tcm-selected-count");
+
+        // Cursor-following tooltip for improvement descriptions.
+        let tooltip = document.querySelector(".tcm-improvement-tooltip.tcm-cursor-tooltip");
+        if (!tooltip) {
+          tooltip = document.createElement("div");
+          tooltip.className = "tcm-improvement-tooltip tcm-cursor-tooltip";
+          document.body.appendChild(tooltip);
+        }
+
+        const hideTooltip = () => {
+          tooltip.hidden = true;
+          tooltip.style.display = "none";
+        };
+
+        const moveTooltip = event => {
+          const offset = 16;
+          const rect = tooltip.getBoundingClientRect();
+          let left = event.clientX + offset;
+          let top = event.clientY + offset;
+
+          if (left + rect.width > window.innerWidth - 8) {
+            left = event.clientX - rect.width - offset;
+          }
+          if (top + rect.height > window.innerHeight - 8) {
+            top = event.clientY - rect.height - offset;
+          }
+
+          tooltip.style.left = `${Math.max(8, left)}px`;
+          tooltip.style.top = `${Math.max(8, top)}px`;
+        };
+
+        const showTooltip = (event, option) => {
+          const html = option.dataset.tcmTooltip || "";
+          if (!html) return;
+          tooltip.innerHTML = html;
+          tooltip.hidden = false;
+          tooltip.style.display = "block";
+          moveTooltip(event);
+        };
+
+        for (const option of root.querySelectorAll(".tcm-advancement-option")) {
+          option.addEventListener("pointerenter", event => showTooltip(event, option));
+          option.addEventListener("pointermove", moveTooltip);
+          option.addEventListener("pointerleave", hideTooltip);
+        }
+
         const updateCount = () => {
           const selectedNow = new Set(boxes.filter(input => input.checked).map(input => input.value));
           const n = selectedNow.size;
           if (count) count.textContent = n;
+
           for (const input of boxes) {
             let prereq = { level: 0, names: [] };
-            try { prereq = JSON.parse(decodeURIComponent(input.dataset.prerequisites || "")); } catch {}
+            try { prereq = JSON.parse(decodeURIComponent(input.closest(".tcm-advancement-option")?.dataset.prerequisites || "")); } catch {}
+
             const missing = [];
             if (prereq.level && level < prereq.level) missing.push(`Tamer level ${prereq.level}`);
             for (const name of prereq.names ?? []) {
@@ -293,21 +363,20 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
               const uuid = optionsByName.get(this.normalizeImprovementName(name));
               if (!uuid || !selectedNow.has(uuid)) missing.push(name);
             }
-            const locked = !input.checked && missing.length > 0;
-            input.dataset.locked = locked ? "true" : "false";
-            input.disabled = locked || (!input.checked && n >= progression.target);
+
             const option = input.closest(".tcm-advancement-option");
-            option?.classList.toggle("is-locked", locked);
-            const note = option?.querySelector(".tcm-improvement-prerequisite");
-            if (note) note.textContent = missing.length ? `Requires: ${missing.join(", ")}` : "";
+            const selected = input.checked;
+            const unavailable = !selected && missing.length > 0;
+
+            option.hidden = unavailable;
+            option.classList.toggle("is-prerequisite-hidden", unavailable);
+            input.disabled = unavailable || (!selected && n >= progression.target);
           }
         };
-        for (const input of boxes) {
-          const option = input.closest(".tcm-advancement-option");
-          if (option?.classList.contains("is-locked")) input.dataset.locked = "true";
-          input.addEventListener("change", updateCount);
-        }
+
+        for (const input of boxes) input.addEventListener("change", updateCount);
         updateCount();
+        hideTooltip();
       }
     });
 
