@@ -24,6 +24,88 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static isTamer(actor) { return Boolean(actor?.items?.some(item => item.type === "class" && (String(item.name ?? "").trim().toLowerCase() === "tamer" || String(item.system?.identifier ?? "").trim().toLowerCase() === "tamer"))); }
   static getTamerLevel(actor) { const cls = actor?.items?.find(item => item.type === "class" && (String(item.name ?? "").trim().toLowerCase() === "tamer" || String(item.system?.identifier ?? "").trim().toLowerCase() === "tamer")); const classLevel = Number(cls?.system?.levels ?? cls?.system?.level ?? 0); return classLevel > 0 ? classLevel : Number(actor?.system?.details?.level ?? 0); }
   static getPocketFamilySlots(level) { if (level >= 19) return 5; if (level >= 15) return 4; if (level >= 11) return 3; if (level >= 3) return 2; if (level >= 1) return 1; return 0; }
+
+  static getMaxCompanionSize(level) { if (level >= 13) return "Huge"; if (level >= 9) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
+  static getMaxCompanionCR(level) { if (level >= 19) return 6; if (level >= 16) return 5; if (level >= 13) return 4; if (level >= 10) return 3; if (level >= 7) return 2; if (level >= 4) return 1; return 0.5; }
+  static getASILevels(level) { return [4, 8, 12, 16, 19].filter(l => level >= l).length; }
+  static getTrainingOptions() {
+    return [
+      { id: "speed", name: "Speed Training", description: "Increase one existing speed by 15 feet, up to 150% of its base speed." },
+      { id: "toughen", name: "Toughen Up", description: "Gain an additional Hit Die and increase maximum hit points by the rolled die plus Constitution modifier." },
+      { id: "ability", name: "Ability Boost", description: "Increase one ability score by 1, to a maximum of 20." },
+      { id: "throat", name: "Go For the Throat", description: "Gain +1 to attack and damage rolls with natural weapons or unarmed strikes." },
+      { id: "save", name: "Survival Instincts", description: "Gain proficiency in one saving throw." },
+      { id: "war", name: "War Training", description: "Gain proficiency with one armour type or two weapons." }
+    ];
+  }
+  static getImprovementTarget(level) { return Math.max(0, level - 1); }
+  static getProgression(record, actor, level) {
+    const target = this.getImprovementTarget(level);
+    const chosen = (record.improvements ?? []).length;
+    return { target, chosen, pending: Math.max(0, target - chosen), bonusHitDice: Number(record.bonusHitDice ?? 0), asiHitDice: this.getASILevels(level) };
+  }
+  static async applyTrainingChoice(actor, record, choice) {
+    record.improvements ??= [];
+    record.improvements.push(choice);
+    if (choice.type === "ability") {
+      const key = choice.ability;
+      const path = `system.abilities.${key}.value`;
+      const current = Number(foundry.utils.getProperty(actor, path) ?? 0);
+      if (current < 20) await actor.update({ [path]: Math.min(20, current + 1) });
+    } else if (choice.type === "speed") {
+      const key = choice.speed;
+      const path = `system.attributes.movement.${key}`;
+      const current = Number(foundry.utils.getProperty(actor, path) ?? 0);
+      if (current > 0) await actor.update({ [path]: current + 15 });
+    } else if (choice.type === "toughen") {
+      const die = Number(actor.system?.attributes?.hd?.faces ?? 8) || 8;
+      const con = Number(actor.system?.abilities?.con?.mod ?? 0);
+      const roll = await new Roll(`1d${die}`).evaluate();
+      const hp = Math.max(1, Number(roll.total ?? die) + Math.max(0, con));
+      record.bonusHitDice = Number(record.bonusHitDice ?? 0) + 1;
+      record.bonusHP = Number(record.bonusHP ?? 0) + hp;
+      const max = Number(actor.system?.attributes?.hp?.max ?? 0);
+      const value = Number(actor.system?.attributes?.hp?.value ?? 0);
+      await actor.update({ "system.attributes.hp.max": max + hp, "system.attributes.hp.value": value + hp });
+    }
+  }
+  static async openTraining(tamer, record, actor) {
+    const level = this.getTamerLevel(tamer);
+    const progression = this.getProgression(record, actor, level);
+    if (!progression.pending) return ui.notifications.info(`${actor.name} has no unassigned Monster Trainer improvements.`);
+    const options = this.getTrainingOptions().map(o => `<option value="${o.id}">${o.name} — ${o.description}</option>`).join("");
+    const content = `<div class="tcm-training-dialog">
+      <p><strong>${actor.name}</strong> has <strong>${progression.pending}</strong> unassigned Monster Trainer improvement(s).</p>
+      <div class="form-group"><label>Improvement</label><select name="improvement">${options}</select></div>
+      <div class="form-group tcm-training-extra" data-for="ability"><label>Ability</label><select name="ability"><option value="str">Strength</option><option value="dex">Dexterity</option><option value="con">Constitution</option><option value="int">Intelligence</option><option value="wis">Wisdom</option><option value="cha">Charisma</option></select></div>
+      <div class="form-group tcm-training-extra" data-for="speed"><label>Speed</label><select name="speed"><option value="walk">Walking</option><option value="burrow">Burrowing</option><option value="climb">Climbing</option><option value="fly">Flying</option><option value="swim">Swimming</option></select></div>
+      <p class="hint">The selected improvement is permanently recorded on this companion. Ability, speed, and Toughen Up changes are applied to the companion Actor.</p>
+    </div>`;
+    const result = await foundry.applications.api.DialogV2.input({
+      window: { title: `Train ${actor.name}` }, content,
+      ok: { label: "Apply Training" }
+    });
+    if (!result?.improvement) return;
+    const choice = { type: result.improvement, ability: result.ability, speed: result.speed, atLevel: level, id: foundry.utils.randomID() };
+    await this.applyTrainingChoice(actor, record, choice);
+    const records = this.records(tamer), target = records.find(r => r.id === record.id);
+    if (target) Object.assign(target, record);
+    await this.save(tamer, records);
+    ui.notifications.info(`${actor.name}: ${this.getTrainingOptions().find(o => o.id === choice.type)?.name ?? "Training"} applied.`);
+  }
+  static async spendSoulBond(tamer, records, index, amount) {
+    const pool = Number(tamer.getFlag(MODULE_ID, "soulBondPool") ?? 5 * this.getTamerLevel(tamer));
+    if (pool <= 0) return ui.notifications.warn("The Tamer's Soul Bond healing pool is empty.");
+    const record = records[index], actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+    if (!actor) return ui.notifications.error("The companion Actor could not be found.");
+    const hp = Number(actor.system?.attributes?.hp?.value ?? 0), max = Number(actor.system?.attributes?.hp?.max ?? 0);
+    const healing = Math.max(0, Math.min(Number(amount) || 0, pool, max - hp));
+    if (!healing) return ui.notifications.warn("That companion does not need healing, or the amount is invalid.");
+    await actor.update({ "system.attributes.hp.value": hp + healing });
+    await tamer.setFlag(MODULE_ID, "soulBondPool", pool - healing);
+    ui.notifications.info(`Soul Bond restored ${healing} HP to ${actor.name}. ${pool - healing} healing remains.`);
+  }
+
   static async summonedRecord(records) { for (const record of records) { if (!record.tokenUuid) continue; const token = await fromUuid(record.tokenUuid).catch(() => null); if (token) return { record, token }; } return null; }
   static tamerToken(tamer) { return canvas?.tokens?.controlled?.find(t => t.actor?.id === tamer.id) ?? canvas?.tokens?.placeables?.find(t => t.actor?.id === tamer.id) ?? null; }
   static findAdjacentSpace(tamerToken) { const grid = canvas.grid.size, x = tamerToken.document.x, y = tamerToken.document.y, candidates = [{ x: x + grid, y }, { x: x - grid, y }, { x, y: y + grid }, { x, y: y - grid }]; for (const p of candidates) { const occupied = canvas.tokens.placeables.some(t => t.document.x === p.x && t.document.y === p.y); if (!occupied && p.x >= 0 && p.y >= 0) return p; } return null; }
