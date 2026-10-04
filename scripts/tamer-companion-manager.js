@@ -79,23 +79,39 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static getImprovementDescription(item) {
     const raw = this.getImprovementDescriptionHTML(item);
     if (!raw) return "";
-    return raw.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\\s+/g, " ").trim();
+    return raw.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
+  }
+
+  static normalizeImprovementName(name) {
+    return String(name ?? "").replace(/[’']/g, "'").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  static actorHasImprovement(actor, prerequisiteName) {
+    const normalized = this.normalizeImprovementName(prerequisiteName);
+    if (!normalized || !actor?.items) return false;
+    return actor.items.some(item =>
+      this.normalizeImprovementName(item.name) === normalized
+      || this.normalizeImprovementName(item.system?.identifier) === normalized
+    );
   }
 
   static parseImprovementPrerequisites(item) {
     const text = this.getImprovementDescription(item);
-    const match = text.match(/Prerequisite\s*:\s*([^\n.]+)/i);
+    const match = text.match(/Prerequisite\s*:\s*([^\.\n]+)/i);
     if (!match) return { text: "", level: 0, names: [] };
-    const raw = match[1].replace(/<[^>]*>/g, " ").trim();
-    const levelMatch = raw.match(/(?:tamer\\s+)?(?:level\\s*)?(\\d+)(?:st|nd|rd|th)?-?level\\s+tamer/i)
-      ?? raw.match(/(\\d+)(?:st|nd|rd|th)-level\\s+tamer/i);
+
+    const raw = match[1].trim();
+    const levelMatch = raw.match(/(?:(?:tamer\s+)?level\s+)?(\d+)(?:st|nd|rd|th)?-?level\s+tamer/i)
+      ?? raw.match(/(\d+)(?:st|nd|rd|th)-level\s+tamer/i);
     const level = levelMatch ? Number(levelMatch[1]) : 0;
+
     const names = raw
-      .replace(/(?:\\d+)(?:st|nd|rd|th)-level\\s+tamer/ig, "")
-      .replace(/tamer\\s+level\\s+\\d+/ig, "")
-      .split(/,|\\band\\b/i)
+      .replace(/(?:(?:tamer\s+)?level\s+)?\d+(?:st|nd|rd|th)?-?level\s+tamer/ig, "")
+      .replace(/tamer\s+level\s+\d+/ig, "")
+      .split(/,|\band\b/i)
       .map(x => x.trim())
       .filter(x => x && !/^—$/.test(x) && !/^become(?: a)? tamer(?:’s|')? companion$/i.test(x));
+
     return { text: raw, level, names };
   }
 
@@ -103,12 +119,15 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const prereq = this.parseImprovementPrerequisites(item);
     const missing = [];
     if (prereq.level && level < prereq.level) missing.push(`Tamer level ${prereq.level}`);
+
     for (const name of prereq.names) {
-      const normalized = name.toLowerCase().replace(/[’']/g, "'").trim();
+      const normalized = this.normalizeImprovementName(name);
       if (!normalized) continue;
-      const matching = [...optionsByName.entries()].find(([candidateName]) => candidateName === normalized);
-      if (!matching || !selectedSourceUuids.has(matching[1])) missing.push(name);
+      if (this.actorHasImprovement(actor, name)) continue;
+      const sourceUuid = optionsByName.get(normalized);
+      if (!sourceUuid || !selectedSourceUuids.has(sourceUuid)) missing.push(name);
     }
+
     return { eligible: missing.length === 0, prerequisite: prereq.text, missing };
   }
 
@@ -142,25 +161,40 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const optionsByName = new Map();
     for (const { item } of options) optionsByName.set(String(item.name).trim().toLowerCase(), item.uuid);
 
-    const groupHtml = [...groups.entries()].map(([treeName, entries]) => `
+    // Level requirements come from the improvement Item's prerequisite text,
+    // while the actual Tamer level is read from the Tamer's Tamer class Item.
+    // Improvements above the current level are hidden; missing named prerequisites
+    // remain visible and locked so the player can see what they need.
+    const visibleGroups = [...groups.entries()].map(([treeName, entries]) => [
+      treeName,
+      entries.filter(({ item }) => {
+        const prereq = this.parseImprovementPrerequisites(item);
+        return selected.has(item.uuid) || !prereq.level || level >= prereq.level;
+      })
+    ]).filter(([, entries]) => entries.length);
+
+    const groupHtml = visibleGroups.map(([treeName, entries]) => `
       <section class="tcm-advancement-group">
         <h3>${esc(treeName)}</h3>
         <div class="tcm-advancement-options">
           ${entries.sort((a,b) => a.item.name.localeCompare(b.item.name)).map(({item}) => {
             const uuid = item.uuid;
-            const description = this.getImprovementDescription(item);
             const prereq = this.parseImprovementPrerequisites(item);
             const eligibility = this.getImprovementEligibility(item, actor, level, selectedUuids, optionsByName);
             const locked = !selected.has(uuid) && !eligibility.eligible;
             const prereqData = encodeURIComponent(JSON.stringify(prereq));
+            const tooltipHtml = this.getImprovementDescriptionHTML(item).replace(/"/g, "&quot;").replace(/\r?\n/g, " ");
+
             return `
-              <label class="tcm-advancement-option${locked ? " is-locked" : ""}" data-tooltip-html="${esc(this.getImprovementDescriptionHTML(item) || "<p>" + esc(item.name) + "</p>")}" data-tooltip-direction="RIGHT">
+              <label class="tcm-advancement-option${locked ? " is-locked" : ""}"
+                data-tooltip-html="${tooltipHtml}"
+                data-tooltip-class="tcm-improvement-tooltip"
+                data-tooltip-direction="RIGHT">
                 <input type="checkbox" name="improvement" value="${esc(uuid)}"${selected.has(uuid) ? " checked" : ""}${locked ? " disabled" : ""} data-prerequisites="${esc(prereqData)}">
                 <span class="tcm-advancement-check"></span>
                 <img class="tcm-advancement-icon" src="${esc(item.img || "icons/svg/item-bag.svg")}" alt="">
                 <span class="tcm-advancement-text">
                   <strong>${esc(item.name)}</strong>
-                  ${description ? `<small>${esc(description)}</small>` : ""}
                   ${eligibility.missing.length ? `<em class="tcm-improvement-prerequisite">Requires: ${esc(eligibility.missing.join(", "))}</em>` : ""}
                 </span>
               </label>`;
@@ -210,8 +244,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             const missing = [];
             if (prereq.level && level < prereq.level) missing.push(`Tamer level ${prereq.level}`);
             for (const name of prereq.names ?? []) {
-              const uuid = optionsByName.get(String(name).trim().toLowerCase());
-              if (uuid && !selectedNow.has(uuid)) missing.push(name);
+              if (this.actorHasImprovement(actor, name)) continue;
+              const uuid = optionsByName.get(this.normalizeImprovementName(name));
+              if (!uuid || !selectedNow.has(uuid)) missing.push(name);
             }
             const locked = !input.checked && missing.length > 0;
             input.dataset.locked = locked ? "true" : "false";
@@ -234,7 +269,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!Array.isArray(result)) return false;
     const desired = new Set(result);
     const availableByUuid = new Map(options.map(({ item }) => [item.uuid, item]));
-    const availableByName = new Map(options.map(({ item }) => [String(item.name).trim().toLowerCase(), item.uuid]));
+    const availableByName = new Map(options.map(({ item }) => [this.normalizeImprovementName(item.name), item.uuid]));
     for (const sourceUuid of desired) {
       const item = availableByUuid.get(sourceUuid);
       if (!item) continue;
