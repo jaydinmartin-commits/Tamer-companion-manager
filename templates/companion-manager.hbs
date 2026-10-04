@@ -1,0 +1,95 @@
+<section class="tcm-root">
+  <header class="tcm-header">
+    <div class="tcm-tamer">
+      <img src="{{tamer.img}}" alt="{{tamer.name}}" class="tcm-tamer-image">
+      <div>
+        <h2>{{tamer.name}}</h2>
+        <div class="tcm-subtitle">Tamer Level {{tamer.level}}</div>
+      </div>
+    </div>
+    <div class="tcm-family-summary">
+      <span class="tcm-summary-label">Pocket Family</span>
+      <strong>{{pocketFamily.occupied}} / {{pocketFamily.slots}}</strong>
+    </div>
+  </header>
+
+  <div class="tcm-toolbar">
+    <button type="button" data-action="addCompanion"><i class="fa-solid fa-plus"></i> Add Companion</button>
+    <button type="button" data-action="refresh"><i class="fa-solid fa-rotate"></i> Refresh</button>
+    <button type="button" data-action="openTamer"><i class="fa-solid fa-user"></i> Tamer Sheet</button>
+  </div>
+
+  <div class="tcm-rule-note">
+    <i class="fa-solid fa-circle-info"></i>
+    <span>Companions remain normal Foundry Actors. Normally only one companion is summoned at a time.</span>
+  </div>
+
+  <div class="tcm-companion-grid">
+    {{#each companions}}
+      <article class="tcm-card {{#if summoned}}is-summoned{{/if}}">
+        <div class="tcm-card-image">
+          <img src="{{img}}" alt="{{name}}">
+          <span class="tcm-status {{#if summoned}}summoned{{else}}vessel{{/if}}">
+            {{#if summoned}}Summoned{{else}}In Vessel{{/if}}
+          </span>
+        </div>
+        <div class="tcm-card-body">
+          <div class="tcm-card-heading">
+            <div>
+              <h3>{{name}}</h3>
+              <div class="tcm-type">{{type}}</div>
+            </div>
+            <span class="tcm-slot">Slot {{slot}}</span>
+          </div>
+
+          <div class="tcm-stats">
+            <div><span>HP</span><strong>{{hp}} / {{hpMax}}</strong></div>
+            <div><span>AC</span><strong>{{ac}}</strong></div>
+            <div><span>Vessel</span><strong>{{vessel}}</strong></div>
+          </div>
+
+          <div class="tcm-actions">
+            <button type="button" data-action="openCompanion" data-index="{{index}}" {{#unless linked}}disabled{{/unless}}>
+              <i class="fa-solid fa-file-lines"></i> Manage
+            </button>
+
+            {{#if summoned}}
+              <button type="button" data-action="dismissCompanion" data-index="{{index}}" class="primary">
+                <i class="fa-solid fa-box"></i> Dismiss
+              </button>
+            {{else}}
+              <button type="button" data-action="summonCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}}>
+                <i class="fa-solid fa-wand-sparkles"></i> Summon
+              </button>
+            {{/if}}
+
+            <button type="button" data-action="unlinkCompanion" data-index="{{index}}" title="Unlink">
+              <i class="fa-solid fa-link-slash"></i>
+            </button>
+          </div>
+        </div>
+      </article>
+    {{/each}}
+
+    {{#each pocketFamily.empty}}
+      <article class="tcm-empty-slot">
+        <i class="fa-solid fa-plus"></i>
+        <span>Empty Pocket Family Slot</span>
+        <small>Use “Add Companion” to bond an Actor.</small>
+      </article>
+    {{/each}}
+
+    {{#unless companions.length}}
+      <div class="tcm-empty-state">
+        <i class="fa-solid fa-paw"></i>
+        <h3>No Companions Linked</h3>
+        <p>Use <strong>Add Companion</strong> to link an existing Foundry Actor.</p>
+      </div>
+    {{/unless}}
+  </div>
+
+  <footer class="tcm-footer">
+    <span><i class="fa-solid fa-database"></i> Relationship data is stored on the Tamer Actor.</span>
+    <span>V0.1.0</span>
+  </footer>
+</section>
