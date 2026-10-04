@@ -10,15 +10,15 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     this._tcmDragDrop = new foundry.applications.ux.DragDrop({ dragSelector: null, dropSelector: ".tcm-drop-zone", permissions: { drop: () => this._canAcceptCompanionDrop() }, callbacks: { drop: event => this._onDropCompanion(event), dragover: event => this._onDragOverCompanion(event) } });
   }
 
-  static DEFAULT_OPTIONS = { id: "tamer-companion-manager", classes: ["tamer-companion-manager"], window: { title: "Tamer Companions", icon: "fa-solid fa-paw", resizable: true }, position: { width: 760, height: 650 }, actions: { refresh: this._onRefresh, addCompanion: this._onAddCompanion, openCompanion: this._onOpenCompanion, summonCompanion: this._onSummonCompanion, dismissCompanion: this._onDismissCompanion, unlinkCompanion: this._onUnlinkCompanion, openTamer: this._onOpenTamer, trainCompanion: this._onTrainCompanion, soulBond: this._onSoulBond } };
+  static DEFAULT_OPTIONS = { id: "tamer-companion-manager", classes: ["tamer-companion-manager"], window: { title: "Tamer Companions", icon: "fa-solid fa-paw", resizable: true }, position: { width: 760, height: 650 }, actions: { refresh: this._onRefresh, addCompanion: this._onAddCompanion, openCompanion: this._onOpenCompanion, summonCompanion: this._onSummonCompanion, dismissCompanion: this._onDismissCompanion, unlinkCompanion: this._onUnlinkCompanion, openTamer: this._onOpenTamer, trainCompanion: this._onTrainCompanion } };
   static PARTS = { main: { template: `modules/${MODULE_ID}/templates/companion-manager.hbs`, root: true } };
 
   async _prepareContext() {
     const level = TamerCompanionManager.getTamerLevel(this.tamer), slots = TamerCompanionManager.getPocketFamilySlots(level), records = TamerCompanionManager.records(this.tamer);
     const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: record.vesselName || "No vessel assigned", linked: Boolean(actor), summoned: Boolean(token), progression }; }));
-    const soulBondMax = 5 * level, soulBondPool = Number(this.tamer.getFlag(MODULE_ID, "soulBondPool") ?? soulBondMax);
-    if (Number(this.tamer.getFlag(MODULE_ID, "soulBondPool")) !== soulBondPool) await this.tamer.setFlag(MODULE_ID, "soulBondPool", soulBondPool);
-    return { tamer: { name: this.tamer.name, img: this.tamer.img, level }, pocketFamily: { slots, occupied: companions.length, empty: Array.from({ length: Math.max(0, slots - companions.length) }, (_, i) => i) }, limits: { size: TamerCompanionManager.getMaxCompanionSize(level), cr: TamerCompanionManager.getMaxCompanionCR(level) }, soulBond: { pool: soulBondPool, max: soulBondMax }, companions };
+    const soulBondFeature = TamerCompanionManager.getSoulBondFeature(this.tamer);
+    const soulBond = soulBondFeature ? { current: Number(soulBondFeature.system?.uses?.value ?? 0), max: Number(soulBondFeature.system?.uses?.max ?? 0) } : { current: 0, max: 0 };
+    return { tamer: { name: this.tamer.name, img: this.tamer.img, level }, pocketFamily: { slots, occupied: companions.length, empty: Array.from({ length: Math.max(0, slots - companions.length) }, (_, i) => i) }, limits: { size: TamerCompanionManager.getMaxCompanionSize(level), cr: TamerCompanionManager.getMaxCompanionCR(level) }, soulBond, companions };
   }
 
   static records(actor) { return foundry.utils.deepClone(actor.getFlag(MODULE_ID, FLAG_KEY) ?? []); }
@@ -206,21 +206,65 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     };
   }
 
-  static async spendSoulBond(tamer, records, index, amount) {
-    const pool = Number(tamer.getFlag(MODULE_ID, "soulBondPool") ?? 5 * this.getTamerLevel(tamer));
-    if (pool <= 0) return ui.notifications.warn("The Tamer's Soul Bond healing pool is empty.");
-    const record = records[index], baseActor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
-    const token = record?.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null;
-    const actor = token?.actor ?? baseActor;
-    if (!actor) return ui.notifications.error("The companion Actor could not be found.");
-    const hp = Number(actor.system?.attributes?.hp?.value ?? 0), max = Number(actor.system?.attributes?.hp?.max ?? 0);
-    const healing = Math.max(0, Math.min(Number(amount) || 0, pool, max - hp));
-    if (!healing) return ui.notifications.warn("That companion does not need healing, or the amount is invalid.");
-    await actor.update({ "system.attributes.hp.value": hp + healing });
-    await tamer.setFlag(MODULE_ID, "soulBondPool", pool - healing);
-    ui.notifications.info(`Soul Bond restored ${healing} HP to ${actor.name}. ${pool - healing} healing remains.`);
+  static getSoulBondFeature(tamer) {
+    return tamer?.items?.find(item => String(item.name ?? '').trim().toLowerCase() === 'soul bond' || String(item.system?.identifier ?? '').trim().toLowerCase() === 'soul-bond') ?? null;
   }
 
+  static async openSoulBond(tamer) {
+    const feature = this.getSoulBondFeature(tamer);
+    if (!feature) return false;
+    const available = Number(feature.system?.uses?.value ?? 0);
+    if (available <= 0) return false;
+    const records = this.records(tamer), damaged = [];
+    for (let index = 0; index < records.length; index++) {
+      const record = records[index];
+      const baseActor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+      const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null;
+      const actor = token?.actor ?? baseActor;
+      if (!actor) continue;
+      const hp = Number(actor.system?.attributes?.hp?.value ?? 0), max = Number(actor.system?.attributes?.hp?.max ?? 0);
+      if (hp < max) damaged.push({ index, actor, hp, max, missing: max - hp });
+    }
+    if (!damaged.length) return false;
+    const rows = damaged.map(({ index, actor, hp, max, missing }) =>
+      '<div class="form-group"><label><strong>' + foundry.utils.escapeHTML(actor.name) + '</strong> — ' + hp + ' / ' + max + ' HP (missing ' + missing + ')</label><input type="number" name="heal-' + index + '" min="0" max="' + Math.min(available, missing) + '" value="0" step="1"></div>'
+    ).join('');
+    const result = await foundry.applications.api.DialogV2.wait({
+      window: { title: 'Soul Bond — Short Rest', resizable: true },
+      position: { width: 520, height: 520 },
+      content: '<p>Soul Bond can restore up to <strong>' + available + ' HP</strong> among your companions.</p><p class="hint">Allocate the healing below. The amount spent is deducted from the Soul Bond limited-use feature.</p><div class="tcm-soul-bond-list">' + rows + '</div>',
+      buttons: [
+        { action: 'restore', label: 'Restore HP', default: true, callback: (event, button) => {
+          const healing = damaged.map(({ index }) => { const input = button.form.querySelector('[name="heal-' + index + '"]'); return { index, amount: Math.max(0, Number(input?.value ?? 0)) }; });
+          const total = healing.reduce((sum, entry) => sum + entry.amount, 0);
+          if (total > available) { ui.notifications.warn('Soul Bond has only ' + available + ' HP of healing remaining.'); return null; }
+          if (healing.some(entry => entry.amount > damaged.find(d => d.index === entry.index).missing)) { ui.notifications.warn('Healing cannot exceed a companion\'s missing HP.'); return null; }
+          if (!total) return null;
+          return healing;
+        } },
+        { action: 'cancel', label: 'Skip' }
+      ]
+    });
+    if (!Array.isArray(result)) return false;
+    const freshFeature = this.getSoulBondFeature(tamer);
+    if (!freshFeature) return false;
+    const current = Number(freshFeature.system?.uses?.value ?? 0), total = result.reduce((sum, entry) => sum + Number(entry.amount ?? 0), 0);
+    if (total <= 0) return false;
+    if (total > current) return ui.notifications.warn('Soul Bond no longer has enough healing available.');
+    let actualHealing = 0;
+    for (const entry of result) {
+      if (!entry.amount) continue;
+      const record = records[entry.index], baseActor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null, token = record?.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null, actor = token?.actor ?? baseActor;
+      if (!actor) continue;
+      const hp = Number(actor.system?.attributes?.hp?.value ?? 0), max = Number(actor.system?.attributes?.hp?.max ?? 0), healing = Math.min(Number(entry.amount), Math.max(0, max - hp));
+      if (healing) { await actor.update({ 'system.attributes.hp.value': hp + healing }); actualHealing += healing; }
+    }
+    if (!actualHealing) return false;
+    const spent = Number(freshFeature.system?.uses?.spent ?? 0);
+    await freshFeature.update({ 'system.uses.spent': spent + actualHealing });
+    ui.notifications.info('Soul Bond restored ' + actualHealing + ' HP among your companions. ' + Math.max(0, current - actualHealing) + ' use' + (current - actualHealing === 1 ? '' : 's') + ' remain.');
+    return true;
+  }
   static async summonedRecord(records) { for (const record of records) { if (!record.tokenUuid) continue; const token = await fromUuid(record.tokenUuid).catch(() => null); if (token) return { record, token }; } return null; }
   static tamerToken(tamer) { return canvas?.tokens?.controlled?.find(t => t.actor?.id === tamer.id) ?? canvas?.tokens?.placeables?.find(t => t.actor?.id === tamer.id) ?? null; }
   static findAdjacentSpace(tamerToken) { const grid = canvas.grid.size, x = tamerToken.document.x, y = tamerToken.document.y, candidates = [{ x: x + grid, y }, { x: x - grid, y }, { x, y: y + grid }, { x, y: y - grid }]; for (const p of candidates) { const occupied = canvas.tokens.placeables.some(t => t.document.x === p.x && t.document.y === p.y); if (!occupied && p.x >= 0 && p.y >= 0) return p; } return null; }
@@ -278,7 +322,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if(await TamerCompanionManager.manageImprovements(this.tamer,record,actor))await this.render({force:true});
   }
 
-  static async _onSoulBond() { const records = TamerCompanionManager.records(this.tamer); const choices = records.map((r,i) => `<option value="${i}">${foundry.utils.escapeHTML(r.name ?? `Companion ${i+1}`)}</option>`).join(""); if (!choices) return ui.notifications.warn("No companions are bonded."); const pool = Number(this.tamer.getFlag(MODULE_ID, "soulBondPool") ?? 5 * TamerCompanionManager.getTamerLevel(this.tamer)); const result = await foundry.applications.api.DialogV2.input({ window: { title: "Soul Bond" }, content: `<div class="form-group"><label>Companion</label><select name="index">${choices}</select></div><div class="form-group"><label>Healing (max ${pool})</label><input type="number" name="amount" min="1" max="${pool}" value="${pool}"></div><p class="hint">Soul Bond has a pool of 5 × Tamer level. It replenishes on a long rest and is spent among companions after a short rest.</p>`, ok: { label: "Restore HP" } }); if (!result) return; await TamerCompanionManager.spendSoulBond(this.tamer, records, Number(result.index), Number(result.amount)); await this.render({ force: true }); }
   static async _onDismissCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)]; if (record && await TamerCompanionManager.dismiss(this.tamer, record)) await this.render({ force: true }); }
   static async _onUnlinkCompanion(event, target) { const records = TamerCompanionManager.records(this.tamer), record = records[Number(target.dataset.index)]; if (!record) return; const yes = await foundry.applications.api.DialogV2.confirm({ window: { title: "Unlink Companion" }, content: `<p>Unlink <strong>${foundry.utils.escapeHTML(record.name ?? "this companion")}</strong>?</p>`, yes: { label: "Unlink" }, no: { label: "Cancel" } }); if (!yes) return; if (record.tokenUuid) { const token = await fromUuid(record.tokenUuid).catch(() => null); if (token) await token.delete(); } records.splice(Number(target.dataset.index), 1); await TamerCompanionManager.save(this.tamer, records); await this.render({ force: true }); }
   static async _onOpenTamer() { await this.tamer.sheet?.render({ force: true }); }
@@ -331,6 +374,20 @@ Hooks.once("init", () => {
   const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
   Hooks.on("getHeaderControlsApplicationV2", addCompanionControl);
   Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
+  Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
+    if (config?.type !== "short" || !TamerCompanionManager.isTamer(actor)) return;
+    if (!(actor.isOwner || game.user.isGM)) return;
+    try {
+      if (await TamerCompanionManager.openSoulBond(actor)) {
+        for (const app of Object.values(ui.windows ?? {})) {
+          if (app instanceof TamerCompanionManager && app.tamer?.id === actor.id) await app.render({ force: true });
+        }
+      }
+    } catch (error) {
+      console.error("[Tamer Companion Manager] Soul Bond short-rest handling failed.", error);
+      ui.notifications.error("Soul Bond could not be processed. See the browser console for details.");
+    }
+  });
 });
 
 globalThis.TamerCompanionManager = TamerCompanionManager;
