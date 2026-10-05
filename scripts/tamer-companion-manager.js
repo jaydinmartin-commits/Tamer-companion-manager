@@ -438,8 +438,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         .trim();
     } else {
       const text = this.getImprovementDescription(item);
-      const match = text.match(/Prerequisite\s*:\s*([^
-.]+)/i);
+      const match = text.match(/Prerequisite\s*:\s*([^\n.]+)/i);
       if (!match) return { text: "", level: 0, names: [] };
       raw = match[1].trim();
     }
