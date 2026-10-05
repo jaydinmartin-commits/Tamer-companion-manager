@@ -7,7 +7,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(options = {}) {
     super(options);
     this.tamer = options.tamer ?? null;
-    this._tcmDragDrop = new foundry.applications.ux.DragDrop({ dragSelector: null, dropSelector: ".tcm-drop-zone, .tcm-vessel-drop-zone", permissions: { drop: event => this._canAcceptCompanionDrop(event) }, callbacks: { drop: event => this._onDropManager(event), dragover: event => this._onDragOverManager(event) } });
+    this._tcmDragDrop = new foundry.applications.ux.DragDrop({ dragSelector: null, dropSelector: ".tcm-drop-zone", permissions: { drop: selector => this._canAcceptCompanionDrop(selector) }, callbacks: { drop: event => this._onDropManager(event), dragover: event => this._onDragOverManager(event) } });
+    this._onNativeVesselDrop = this._onNativeVesselDrop.bind(this);
+    this._onNativeVesselDragOver = this._onNativeVesselDragOver.bind(this);
   }
 
   static DEFAULT_OPTIONS = { id: "tamer-companion-manager", classes: ["tamer-companion-manager"], window: { title: "Tamer Companions", icon: "fa-solid fa-paw", resizable: true }, position: { width: 760, height: 650 }, actions: { refresh: this._onRefresh, addCompanion: this._onAddCompanion, openCompanion: this._onOpenCompanion, summonCompanion: this._onSummonCompanion, dismissCompanion: this._onDismissCompanion, unlinkCompanion: this._onUnlinkCompanion, openTamer: this._onOpenTamer, trainCompanion: this._onTrainCompanion, clearVessel: this._onClearVessel } };
@@ -1111,6 +1113,20 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if (event.target.closest(".tcm-vessel-drop-zone")) return this._onDropVessel(event);
     return this._onDropCompanion(event);
   }
+  _onNativeVesselDragOver(event) {
+    const zone = event.target?.closest?.(".tcm-vessel-drop-zone");
+    if (!zone) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  }
+  async _onNativeVesselDrop(event) {
+    const zone = event.target?.closest?.(".tcm-vessel-drop-zone");
+    if (!zone) return;
+    event.preventDefault();
+    event.stopPropagation();
+    await this._onDropVessel(event);
+  }
   async _onDropVessel(event) {
     const zone = event.target.closest(".tcm-vessel-drop-zone"), index = Number(zone?.dataset.index);
     const record = TamerCompanionManager.records(this.tamer)[index];
@@ -1187,7 +1203,13 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this._tcmCancelInitialOpen) await this.close();
   }
 
-  async _onRender(context, options) { await super._onRender(context, options); if (this.element) this._tcmDragDrop.bind(this.element); }
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    if (!this.element) return;
+    this._tcmDragDrop.bind(this.element);
+    this.element.addEventListener("dragover", this._onNativeVesselDragOver);
+    this.element.addEventListener("drop", this._onNativeVesselDrop);
+  }
   static async _onRefresh() { await this.render({ force: true }); }
 
   static async chooseTamer() {
