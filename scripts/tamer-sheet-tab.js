@@ -218,11 +218,10 @@ class TamerCompanionSheetTab {
       }
 
       if (action === "summonCompanion") {
-        const summoned = await TamerCompanionManager.summon(controller.tamer, record);
-        if (summoned) {
-          const sheet = controller._tcmSheetApp;
-          if (sheet?.rendered) await sheet.close();
-        }
+        const sheet = controller._tcmSheetApp;
+        const sheetWasRendered = Boolean(sheet?.rendered);
+        if (sheetWasRendered) await sheet.close();
+        await TamerCompanionManager.summon(controller.tamer, record);
         return;
       }
 
