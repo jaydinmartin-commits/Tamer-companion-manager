@@ -50,7 +50,15 @@
   </button>
 </div>
 
-          {{#if vessel}}<div class="tcm-vessel-drop-zone has-vessel" data-index="{{index}}" title="Drag another Item here to replace {{vessel}}"><img class="tcm-vessel-icon" src="{{vesselImg}}" alt="{{vessel}}"><button type="button" class="tcm-vessel-replace" data-action="clearVessel" data-index="{{index}}" title="Replace Vessel"><i class="fa-solid fa-rotate"></i></button></div>{{else}}<div class="tcm-vessel-drop-zone" data-index="{{index}}" title="Drag a vessel Item here"><i class="fa-solid fa-box-open tcm-vessel-placeholder"></i></div>{{/if}}
+          <div class="tcm-vessel-picker">
+            <i class="fa-solid fa-box-open" aria-hidden="true"></i>
+            <select data-tcm-vessel data-index="{{index}}" title="Choose companion vessel">
+              <option value="">No vessel assigned</option>
+              {{#each vessels}}
+                <option value="{{uuid}}" {{#if selected}}selected{{/if}}>{{name}}{{#if equipped}} — Equipped{{/if}}</option>
+              {{/each}}
+            </select>
+          </div>
           <div class="tcm-actions">
             <button type="button" data-action="openCompanion" data-index="{{index}}" {{#unless linked}}disabled{{/unless}}>
               <i class="fa-solid fa-file-lines"></i><span>Manage</span>
