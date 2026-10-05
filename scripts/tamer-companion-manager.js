@@ -954,17 +954,17 @@ class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(Applicatio
   }
 
   static async _onSave(event, target) {
-    const form = event?.currentTarget?.form
-      ?? target?.form
-      ?? target?.closest?.("form")
-      ?? event?.target?.closest?.("form")
-      ?? this.element?.querySelector("form")
-      ?? document.querySelector("#tcm-companion-sources form");
-    if (!form) return ui.notifications.error("Could not read the Companion Sources form.");
-
-    const selected = [...form.querySelectorAll("input[name='companionSourcePack']:checked")]
+    const inputs = [...document.querySelectorAll(
+      "#tcm-companion-sources input[name='companionSourcePack'], .tcm-source-registry input[name='companionSourcePack']"
+    )];
+    const selected = inputs
+      .filter(input => input.checked)
       .map(input => String(input.value))
       .filter(collection => game.packs.has(collection));
+
+    if (!inputs.length) {
+      return ui.notifications.error("Could not find the Companion Sources selections. Please reopen the window and try again.");
+    }
 
     await game.settings.set(MODULE_ID, "companionSourcePacks", selected);
 
@@ -978,7 +978,10 @@ class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(Applicatio
     }
 
     ui.notifications.info(`Companion sources updated. ${stored.length} Actor compendium${stored.length === 1 ? "" : "s"} enabled.`);
-    await this.close();
+    if (target?.closest) {
+      const appElement = target.closest(".application, .window-app");
+      if (appElement?.close) await appElement.close();
+    }
   }
 
   static async _onCancel() { await this.close(); }
