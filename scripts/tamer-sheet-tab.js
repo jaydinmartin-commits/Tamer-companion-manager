@@ -67,7 +67,8 @@ class TamerCompanionSheetTab {
 
       root.addEventListener("dragover", event => this.onDragOver(event));
       root.addEventListener("drop", event => this.onDrop(event, controller));
-      content.addEventListener("click", event => this.onAction(event, controller));
+      content.addEventListener("click", event => this.onAction(event, controller), true);
+      content.addEventListener("change", event => this.onChange(event, controller), true);
 
       nav.addEventListener("click", event => {
         const clicked = event.target?.closest?.("[data-tab]");
@@ -120,13 +121,13 @@ class TamerCompanionSheetTab {
   }
 
   static async onAction(event, controller) {
-    const target = event.target?.closest?.("[data-action]");
+    const target = event.target?.closest?.("[data-tcm-action]");
     if (!target || !controller._tcmSheetContent.contains(target)) return;
 
     event.preventDefault();
     event.stopPropagation();
 
-    const action = target.dataset.action;
+    const action = target.dataset.tcmAction;
     const tamer = controller.tamer;
 
     try {
@@ -205,6 +206,31 @@ class TamerCompanionSheetTab {
     } catch (error) {
       console.error("[Tamer Companion Manager] Embedded tab action failed.", error);
       ui.notifications.error("The Companion Manager action could not be completed. See the console for details.");
+    }
+  }
+
+  static async onChange(event, controller) {
+    const select = event.target?.closest?.("[data-tcm-action='setVessel']");
+    if (!select || !controller._tcmSheetContent.contains(select)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const index = Number(select.dataset.index);
+    const record = TamerCompanionManager.records(controller.tamer)[index];
+    if (!record) return;
+    try {
+      const uuid = String(select.value ?? "").trim();
+      if (!uuid) {
+        await TamerCompanionManager.clearVessel(controller.tamer, record);
+      } else {
+        const item = await fromUuid(uuid).catch(() => null);
+        if (!item) return ui.notifications.error("The selected vessel could not be found.");
+        if (item.parent?.uuid !== controller.tamer.uuid) return ui.notifications.warn("The selected vessel must be an Item owned by the Tamer.");
+        await TamerCompanionManager.setVessel(controller.tamer, record, item);
+      }
+      await this.renderController(controller);
+    } catch (error) {
+      console.error("[Tamer Companion Manager] Vessel selection failed.", error);
+      ui.notifications.error("The vessel selection could not be completed.");
     }
   }
 
