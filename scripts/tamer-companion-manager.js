@@ -42,7 +42,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     this._tcmDragDrop = new foundry.applications.ux.DragDrop({ dragSelector: null, dropSelector: ".tcm-drop-zone", permissions: { drop: selector => this._canAcceptCompanionDrop(selector) }, callbacks: { drop: event => this._onDropManager(event), dragover: event => this._onDragOverManager(event) } });
   }
 
-  static DEFAULT_OPTIONS = { id: "tamer-companion-manager", classes: ["tamer-companion-manager"], window: { title: "Tamer Companions", icon: "fa-solid fa-paw", resizable: true }, position: { width: 760, height: 650 }, actions: { refresh: this._onRefresh, addCompanion: this._onAddCompanion, openCompanion: this._onOpenCompanion, summonCompanion: this._onSummonCompanion, dismissCompanion: this._onDismissCompanion, unlinkCompanion: this._onUnlinkCompanion, openTamer: this._onOpenTamer, trainCompanion: this._onTrainCompanion, clearVessel: this._onClearVessel } };
+  static DEFAULT_OPTIONS = { id: "tamer-companion-manager", classes: ["tamer-companion-manager"], window: { title: "Tamer Companions", icon: "fa-solid fa-paw", resizable: true }, position: { width: 760, height: 650 }, actions: { refresh: this._onRefresh, addCompanion: this._onAddCompanion, openCompanion: this._onOpenCompanion, summonCompanion: this._onSummonCompanion, dismissCompanion: this._onDismissCompanion, unlinkCompanion: this._onUnlinkCompanion, openTamer: this._onOpenTamer, trainCompanion: this._onTrainCompanion, clearVessel: this._onClearVessel, openSplicer: this._onOpenSplicer } };
   static PARTS = { main: { template: `modules/${MODULE_ID}/templates/companion-manager.hbs`, root: true } };
 
   async _prepareContext() {
@@ -1539,6 +1539,13 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if(await TamerCompanionManager.manageImprovements(this.tamer,record,actor))await this.render({force:true});
   }
 
+  static async _onOpenSplicer(event, target) {
+    if (!TamerCompanionManager.isSplicer(this.tamer)) return;
+    const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)];
+    if (!record) return;
+    await new TamerSplicerAugmentManager({ tamer: this.tamer, record }).render({ force: true });
+  }
+
   static async _onDismissCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)]; if (record && await TamerCompanionManager.dismiss(this.tamer, record)) await this.render({ force: true }); }
   static async _onClearVessel(event, target) { const records = TamerCompanionManager.records(this.tamer), record = records[Number(target.dataset.index)]; if (!record) return; await TamerCompanionManager.clearVessel(this.tamer, record); await this.render({ force: true }); }
   static async _onUnlinkCompanion(event, target) { const records = TamerCompanionManager.records(this.tamer), record = records[Number(target.dataset.index)]; if (!record) return; const yes = await foundry.applications.api.DialogV2.confirm({ window: { title: "Unlink Companion" }, content: `<p>Unlink <strong>${foundry.utils.escapeHTML(record.name ?? "this companion")}</strong>?</p>`, yes: { label: "Unlink" }, no: { label: "Cancel" } }); if (!yes) return; if (record.tokenUuid) { const token = await fromUuid(record.tokenUuid).catch(() => null); if (token) await token.delete(); } records.splice(Number(target.dataset.index), 1); await TamerCompanionManager.save(this.tamer, records); await this.render({ force: true }); }
@@ -1546,6 +1553,86 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 }
 
 
+
+class TamerSplicerAugmentManager extends HandlebarsApplicationMixin(ApplicationV2) {
+  static DEFAULT_OPTIONS = {
+    id: "tcm-splicer-augment-manager",
+    classes: ["tcm-splicer-augment-manager"],
+    window: { title: "Splicer Augments", icon: "fa-solid fa-dna", resizable: true },
+    position: { width: 760, height: 720 },
+    actions: { increment: this._onIncrement, decrement: this._onDecrement, save: this._onSave, cancel: this._onCancel }
+  };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/splicer-augment-manager.hbs`, root: true } };
+
+  constructor(options = {}) {
+    super(options);
+    this.tamer = options.tamer ?? null;
+    this.record = options.record ?? null;
+    this.assignments = TamerCompanionManager.getSplicerPendingAssignments(this.record);
+  }
+
+  async _prepareContext() {
+    const registry = TamerCompanionManager.getSplicerAugmentRegistry();
+    const counts = new Map(this.assignments.map(a => [String(a.id), Number(a.count ?? 0)]));
+    const total = TamerCompanionManager.getSplicerTotalPoints(this.tamer);
+    const otherSpent = TamerCompanionManager.getSplicerSharedSpentPoints(this.tamer, this.record?.id ?? null);
+    const spent = TamerCompanionManager.getSplicerSpentPoints(this.record, this.assignments);
+    return {
+      tamer: { name: this.tamer?.name ?? "Tamer", level: TamerCompanionManager.getTamerLevel(this.tamer) },
+      companion: { name: this.record?.name ?? "Companion" },
+      total, otherSpent, spent, sharedSpent: otherSpent + spent,
+      available: Math.max(0, total - otherSpent - spent),
+      pending: JSON.stringify(this.assignments) !== JSON.stringify(TamerCompanionManager.getSplicerAssignments(this.record)),
+      augments: registry.map(a => ({
+        ...a,
+        count: Math.max(0, Math.floor(counts.get(String(a.id)) ?? 0)),
+        maxCount: Number(a.maxCount ?? (a.repeatable ? 999 : 1))
+      }))
+    };
+  }
+
+  static async _onIncrement(event, target) {
+    const id = String(target.dataset.id ?? "");
+    const augment = TamerCompanionManager.getSplicerAugmentRegistry().find(a => String(a.id) === id);
+    if (!augment) return;
+    const current = Number(this.assignments.find(a => String(a.id) === id)?.count ?? 0);
+    const max = Number(augment.maxCount ?? (augment.repeatable ? 999 : 1));
+    if (!augment.repeatable && current >= 1) return;
+    if (current >= max) return;
+    if (current >= 1 && augment.minLevelForSecond && TamerCompanionManager.getTamerLevel(this.tamer) < Number(augment.minLevelForSecond)) {
+      return ui.notifications.warn(`${augment.name} requires Tamer level ${augment.minLevelForSecond} for its second application.`);
+    }
+    const next = this.assignments.map(a => ({ ...a }));
+    const entry = next.find(a => String(a.id) === id);
+    if (entry) entry.count = current + 1;
+    else next.push({ id, count: 1 });
+    const validation = TamerCompanionManager.validateSplicerAssignments(this.tamer, this.record, next);
+    if (!validation.valid) return ui.notifications.warn(validation.errors[0]);
+    this.assignments = validation.assignments;
+    await this.render({ force: true });
+  }
+
+  static async _onDecrement(event, target) {
+    const id = String(target.dataset.id ?? "");
+    const next = this.assignments.map(a => ({ ...a }));
+    const entry = next.find(a => String(a.id) === id);
+    if (!entry) return;
+    entry.count--;
+    this.assignments = next.filter(a => a.count > 0);
+    await this.render({ force: true });
+  }
+
+  static async _onSave() {
+    const validation = TamerCompanionManager.validateSplicerAssignments(this.tamer, this.record, this.assignments);
+    if (!validation.valid) return ui.notifications.error(validation.errors[0]);
+    if (!await TamerCompanionManager.setSplicerAssignments(this.tamer, this.record, validation.assignments)) return;
+    ui.notifications.info("Splicer augment changes are pending until your next long rest.");
+    await this.close();
+    await TamerCompanionManager.refreshOpenManagers(this.tamer);
+  }
+
+  static async _onCancel() { await this.close(); }
+}
 
 class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
@@ -2091,4 +2178,4 @@ Hooks.once("init", () => {
 globalThis.TamerCompanionManager = TamerCompanionManager;
 
 globalThis.TamerCompanionImprovementRegistry = TamerCompanionImprovementRegistry;
-globalThis.TamerSplicerAugmentRegistry = TamerSplicerAugmentRegistry;
+globalThis.TamerSplicerAugmentRegistry = TamerSplicerAugmentRegistry;\nglobalThis.TamerSplicerAugmentManager = TamerSplicerAugmentManager;\n
