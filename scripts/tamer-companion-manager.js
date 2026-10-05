@@ -914,8 +914,102 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static getCompanionHitDie(actor) {
     const denomination = Number(actor?.system?.attributes?.hd?.denomination ?? 0);
     if (denomination > 0) return denomination;
-    const formula = String(actor?.system?.attributes?.hd?.formula ?? "").match(/d(4|6|8|10|12)/i);
+    const formula = String(actor?.system?.attributes?.hp?.formula ?? "").match(/d(4|6|8|10|12)/i);
     return formula ? Number(formula[1]) : 8;
+  }
+
+  static getCompanionHitDieFormula(actor) {
+    const formula = String(actor?.system?.attributes?.hp?.formula ?? "").trim();
+    const match = formula.match(/^(\d+)d(4|6|8|10|12)$/i);
+    if (!match) return { count: 1, denomination: this.getCompanionHitDie(actor) };
+    return { count: Math.max(0, Number(match[1])), denomination: Number(match[2]) };
+  }
+
+  static getTamerProficiency(tamer) {
+    return Math.max(0, Number(tamer?.system?.attributes?.prof ?? 0));
+  }
+
+  static async syncCompanionNativeStats(tamer, {notify = false} = {}) {
+    if (!tamer || !this.isTamer(tamer)) return false;
+    const records = this.records(tamer);
+    const tamerProf = this.getTamerProficiency(tamer);
+    let changed = false;
+
+    for (const record of records) {
+      const actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+      if (!actor) continue;
+
+      const effects = actor.effects.filter(effect => effect.flags?.[MODULE_ID]?.tamerProficiency);
+      let effect = effects[0] ?? null;
+      if (effects.length > 1) {
+        await actor.deleteEmbeddedDocuments("ActiveEffect", effects.slice(1).map(e => e.id));
+        changed = true;
+      }
+
+      const change = {
+        key: "system.attributes.prof",
+        type: "override",
+        value: String(tamerProf)
+      };
+
+      if (!effect) {
+        const created = await actor.createEmbeddedDocuments("ActiveEffect", [{
+          name: "Tamer Proficiency",
+          img: "icons/skills/social/diplomacy-peace-alliance.webp",
+          disabled: false,
+          transfer: false,
+          changes: [change],
+          flags: {
+            [MODULE_ID]: {
+              tamerProficiency: true,
+              tamerUuid: tamer.uuid
+            }
+          }
+        }]);
+        effect = created?.[0] ?? null;
+        if (effect) changed = true;
+      } else {
+        const existing = effect.changes?.[0];
+        const needsUpdate = effect.disabled
+          || existing?.key !== change.key
+          || existing?.type !== change.type
+          || String(existing?.value ?? "") !== change.value
+          || effect.flags?.[MODULE_ID]?.tamerUuid !== tamer.uuid;
+        if (needsUpdate) {
+          await effect.update({
+            disabled: false,
+            changes: [change],
+            ["flags." + MODULE_ID + ".tamerProficiency.tamerUuid"]: tamer.uuid
+          });
+          changed = true;
+        }
+      }
+
+      const formula = this.getCompanionHitDieFormula(actor);
+      if (record.hitDiceBaseCount === undefined) {
+        record.hitDiceBaseCount = formula.count;
+        record.hitDiceBaseDenomination = formula.denomination;
+        changed = true;
+      }
+
+      const baseCount = Math.max(0, Number(record.hitDiceBaseCount ?? formula.count));
+      const denomination = Number(record.hitDiceBaseDenomination ?? formula.denomination ?? 4);
+      const target = this.getProgression(record, actor, this.getTamerLevel(tamer)).totalBonusHitDice;
+      const desiredCount = Math.max(1, baseCount + target);
+      const desiredFormula = `${desiredCount}d${denomination}`;
+
+      if (String(actor.system?.attributes?.hp?.formula ?? "").trim() !== desiredFormula) {
+        await actor.update({"system.attributes.hp.formula": desiredFormula});
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await this.save(tamer, records);
+      await this.refreshOpenManagers(tamer);
+      if (notify) ui.notifications.info("Companion proficiency and Hit Dice have been synchronized with the Tamer.");
+    }
+    return changed;
   }
   static getCompanionConstitutionModifier(actor) { return Number(actor?.system?.abilities?.con?.mod ?? 0); }
   static getAppliedHitDice(record) { return Math.max(0, Number(record?.hitDiceApplied ?? 0)); }
@@ -1425,7 +1519,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const tree=await TamerCompanionManager.findBespokeTree(actor);
-    const record={id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0,hitDiceApplied:0,hitDiceChoices:{}};
+    const baseHitDieFormula=TamerCompanionManager.getCompanionHitDieFormula(actor);
+    const record={id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0,hitDiceApplied:0,hitDiceChoices:{},hitDiceBaseCount:baseHitDieFormula.count,hitDiceBaseDenomination:baseHitDieFormula.denomination};
 
     // Bespoke improvements with "become a tamer's companion" as their
     // prerequisite are granted automatically when the creature is tamed.
@@ -1467,6 +1562,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!applied) ui.notifications.info(`${actor.name} was bonded successfully; its bonus Hit Die training remains pending.`);
     }
     await TamerCompanionManager.save(this.tamer,records);
+    await TamerCompanionManager.syncCompanionNativeStats(this.tamer);
     ui.notifications.info(tree?`${actor.name} has been bonded with ${tree.name} improvements available.`:`${actor.name} has been bonded as a companion.`);
     await this.render({force:true}); return true;
   }
@@ -2069,6 +2165,7 @@ Hooks.once("init", () => {
       // Resolve companion Hit Dice first so the HP choice is completed
       // before the improvement picker is presented on a level-up.
       await TamerCompanionManager.syncCompanionHitDice(actor);
+      await TamerCompanionManager.syncCompanionNativeStats(actor);
       await TamerCompanionManager.syncCompanionImprovements(actor, {
         allowAutomaticPrompt: levelIncreased,
         levelDecreased
@@ -2121,6 +2218,7 @@ Hooks.once("init", () => {
   // Primary trigger: the Actor's overall level changes during the D&D 5e advancement.
   Hooks.on("updateActor", async (actor, changes) => {
     if (!TamerCompanionManager.isTamer(actor)) return;
+    if (actor.isOwner || game.user.isGM) await TamerCompanionManager.syncCompanionNativeStats(actor);
     if (!Object.hasOwn(changes?.system?.details ?? {}, "level")) return;
     await syncTamerCompanionAdvancement(actor);
   });
