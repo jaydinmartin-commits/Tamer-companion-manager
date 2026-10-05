@@ -1426,15 +1426,28 @@ Hooks.once("init", () => {
   const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
   Hooks.on("getHeaderControlsApplicationV2", addCompanionControl);
   Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
+  TamerCompanionManager._pendingLevelTransitions = new Map();
+
+  const captureLevelTransition = (actor, oldLevel, newLevel) => {
+    if (!actor || !TamerCompanionManager.isTamer(actor)) return;
+    const before = Number(oldLevel);
+    const after = Number(newLevel);
+    if (!Number.isFinite(before) || !Number.isFinite(after) || before === after) return;
+    TamerCompanionManager._pendingLevelTransitions.set(actor.uuid ?? actor.id, {
+      before,
+      after,
+      direction: after > before ? "up" : "down"
+    });
+  };
+
   const syncTamerCompanionAdvancement = async actor => {
     if (!actor || !TamerCompanionManager.isTamer(actor)) return;
     if (!(actor.isOwner || game.user.isGM)) return;
     try {
-      const level = TamerCompanionManager.getTamerLevel(actor);
-      const previousLevel = Number(actor.getFlag(MODULE_ID, "lastAutomaticImprovementLevel"));
-      const hasPreviousLevel = Number.isFinite(previousLevel) && previousLevel > 0;
-      const levelIncreased = hasPreviousLevel && level > previousLevel;
-      const levelDecreased = hasPreviousLevel && level < previousLevel;
+      const transitionKey = actor.uuid ?? actor.id;
+      const transition = TamerCompanionManager._pendingLevelTransitions.get(transitionKey);
+      const levelIncreased = transition?.direction === "up";
+      const levelDecreased = transition?.direction === "down";
 
       // Resolve companion Hit Dice first so the HP choice is completed
       // before the improvement picker is presented on a level-up.
@@ -1444,11 +1457,9 @@ Hooks.once("init", () => {
         levelDecreased
       });
 
-      // Persist the processed level. Duplicate advancement hooks at the same
-      // level therefore cannot be mistaken for another level-up.
-      if (!hasPreviousLevel || previousLevel !== level) {
-        await actor.setFlag(MODULE_ID, "lastAutomaticImprovementLevel", level);
-      }
+      // Consume the captured transition after synchronization. Later duplicate
+      // advancement-complete hooks have no level transition to trigger a picker.
+      TamerCompanionManager._pendingLevelTransitions.delete(transitionKey);
 
       for (const app of Object.values(ui.windows ?? {})) {
         if (app instanceof TamerCompanionManager && app.tamer?.id === actor.id) {
@@ -1475,6 +1486,26 @@ Hooks.once("init", () => {
       ui.notifications.error("Companion Hit Dice could not be synchronized. See the browser console for details.");
     }
   };
+
+  // Capture the level transition before Foundry mutates the Actor. This is
+  // authoritative for distinguishing level-up from level-down.
+  Hooks.on("preUpdateActor", (actor, changes) => {
+    if (!TamerCompanionManager.isTamer(actor)) return;
+    const current = TamerCompanionManager.getTamerLevel(actor);
+    const next = changes?.system?.details?.level;
+    if (next !== undefined) captureLevelTransition(actor, current, next);
+  });
+
+  // Some D&D 5e advancement flows update the Tamer class Item's level instead
+  // of the Actor's aggregate level first.
+  Hooks.on("preUpdateItem", (item, changes) => {
+    if (item?.type !== "class") return;
+    const actor = item.parent;
+    if (!actor || !TamerCompanionManager.isTamer(actor)) return;
+    const current = Number(item.system?.levels ?? item.system?.level ?? 0);
+    const next = changes?.system?.levels ?? changes?.system?.level;
+    if (next !== undefined) captureLevelTransition(actor, current, next);
+  });
 
   // Primary trigger: the Actor's overall level changes during the D&D 5e advancement.
   Hooks.on("updateActor", async (actor, changes) => {
