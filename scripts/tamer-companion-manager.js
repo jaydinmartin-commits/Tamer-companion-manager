@@ -954,7 +954,12 @@ class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(Applicatio
   }
 
   static async _onSave(event, target) {
-    const form = target?.closest?.("form") ?? this.element?.querySelector("form");
+    const form = event?.currentTarget?.form
+      ?? target?.form
+      ?? target?.closest?.("form")
+      ?? event?.target?.closest?.("form")
+      ?? this.element?.querySelector("form")
+      ?? document.querySelector("#tcm-companion-sources form");
     if (!form) return ui.notifications.error("Could not read the Companion Sources form.");
 
     const selected = [...form.querySelectorAll("input[name='companionSourcePack']:checked")]
