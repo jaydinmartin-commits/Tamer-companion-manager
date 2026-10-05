@@ -129,6 +129,7 @@ class TamerCompanionSheetTab {
 
     controller.tamer = actor;
     controller._tcmSheetContent = content;
+    controller._tcmSheetApp = app;
     await this.render(controller);
 
     if (controller._tcmTabActive) {
@@ -217,8 +218,12 @@ class TamerCompanionSheetTab {
       }
 
       if (action === "summonCompanion") {
-        await TamerCompanionManager.summon(controller.tamer, record);
-        return this.render(controller);
+        const summoned = await TamerCompanionManager.summon(controller.tamer, record);
+        if (summoned) {
+          const sheet = controller._tcmSheetApp;
+          if (sheet?.rendered) await sheet.close();
+        }
+        return;
       }
 
       if (action === "dismissCompanion") {
