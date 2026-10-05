@@ -75,6 +75,22 @@ class TamerCompanionSheetTab {
 
   static async render(controller) {
     const context = await TamerCompanionManager.prototype._prepareContext.call(controller);
+    const records = TamerCompanionManager.records(controller.tamer);
+    const assigned = new Set(records.map(record => record?.vesselUuid).filter(Boolean));
+    const vesselItems = [...(controller.tamer.items?.contents ?? [])]
+      .filter(item => item?.documentName === "Item" && item.type !== "class")
+      .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+    for (const companion of context.companions ?? []) {
+      const record = records[companion.index];
+      companion.vessels = vesselItems
+        .filter(item => item.uuid === record?.vesselUuid || !assigned.has(item.uuid))
+        .map(item => ({
+          uuid: item.uuid,
+          name: item.name,
+          equipped: item.system?.equipped === true,
+          selected: item.uuid === record?.vesselUuid
+        }));
+    }
     controller._tcmSheetContent.innerHTML = await renderTemplate(
       `modules/${MODULE_ID}/templates/companion-manager.hbs`,
       context
