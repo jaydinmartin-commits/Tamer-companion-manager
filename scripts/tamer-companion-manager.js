@@ -34,6 +34,14 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const level = TamerCompanionManager.getTamerLevel(this.tamer), slots = TamerCompanionManager.getPocketFamilySlots(level), records = TamerCompanionManager.records(this.tamer);
+    // Reconcile stale summoned-token references before rendering state.
+    let stateChanged = false;
+    for (const record of records) {
+      if (!record?.tokenUuid) continue;
+      const token = await fromUuid(record.tokenUuid).catch(() => null);
+      if (!token) { record.tokenUuid = null; record.status = "in-vessel"; stateChanged = true; }
+    }
+    if (stateChanged) await TamerCompanionManager.save(this.tamer, records);
     const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; const vessel = await TamerCompanionManager.getVessel(record, this.tamer); return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: vessel?.name ?? record.vesselName ?? "No vessel assigned", vesselImg: vessel?.img ?? "icons/svg/item-bag.svg", vesselEquipped: Boolean(vessel?.system?.equipped), linked: Boolean(actor), summoned: Boolean(token), progression }; }));
     const soulBondFeature = TamerCompanionManager.getSoulBondFeature(this.tamer);
     const soulBond = soulBondFeature ? { current: Number(soulBondFeature.system?.uses?.value ?? 0), max: Number(soulBondFeature.system?.uses?.max ?? 0) } : { current: 0, max: 0 };
@@ -1062,9 +1070,38 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     ui.notifications.info('Soul Bond restored ' + actualHealing + ' HP among your companions. ' + Math.max(0, current - actualHealing) + ' use' + (current - actualHealing === 1 ? '' : 's') + ' remain.');
     return true;
   }
-  static async summonedRecord(records) { for (const record of records) { if (!record.tokenUuid) continue; const token = await fromUuid(record.tokenUuid).catch(() => null); if (token) return { record, token }; } return null; }
-  static tamerToken(tamer) { return canvas?.tokens?.controlled?.find(t => t.actor?.id === tamer.id) ?? canvas?.tokens?.placeables?.find(t => t.actor?.id === tamer.id) ?? null; }
-  static findAdjacentSpace(tamerToken) { const grid = canvas.grid.size, x = tamerToken.document.x, y = tamerToken.document.y, candidates = [{ x: x + grid, y }, { x: x - grid, y }, { x, y: y + grid }, { x, y: y - grid }]; for (const p of candidates) { const occupied = canvas.tokens.placeables.some(t => t.document.x === p.x && t.document.y === p.y); if (!occupied && p.x >= 0 && p.y >= 0) return p; } return null; }
+  static async summonedRecord(records) {
+    for (const record of records) {
+      if (!record?.tokenUuid) continue;
+      const token = await fromUuid(record.tokenUuid).catch(() => null);
+      if (token) return { record, token };
+    }
+    return null;
+  }
+  static tamerToken(tamer) {
+    return canvas?.tokens?.controlled?.find(t => t.actor?.id === tamer.id) ?? canvas?.tokens?.placeables?.find(t => t.actor?.id === tamer.id) ?? null;
+  }
+  static findSummonSpace(tamerToken, maxFeet = 30) {
+    const grid = canvas.grid.size, origin = tamerToken.document, sceneGrid = canvas.scene?.grid;
+    const pixelsPerFoot = (sceneGrid?.size ?? grid) / (sceneGrid?.distance ?? 5), maxPixels = maxFeet * pixelsPerFoot;
+    const width = Math.max(1, Number(tamerToken.document.width ?? 1)), height = Math.max(1, Number(tamerToken.document.height ?? 1));
+    const originCenter = { x: origin.x + (width * grid) / 2, y: origin.y + (height * grid) / 2 };
+    const occupied = new Set((canvas.tokens?.placeables ?? []).map(token => `${token.document.x}:${token.document.y}`));
+    const maxCells = Math.ceil(maxPixels / grid), candidates = [];
+    for (let dx = -maxCells; dx <= maxCells; dx++) {
+      for (let dy = -maxCells; dy <= maxCells; dy++) {
+        if (dx === 0 && dy === 0) continue;
+        const x = origin.x + dx * grid, y = origin.y + dy * grid;
+        if (x < 0 || y < 0 || occupied.has(`${x}:${y}`)) continue;
+        const center = { x: x + (width * grid) / 2, y: y + (height * grid) / 2 }, distance = Math.hypot(center.x - originCenter.x, center.y - originCenter.y);
+        if (distance > maxPixels) continue;
+        if (canvas.visibility?.testVisibility && !canvas.visibility.testVisibility(center)) continue;
+        candidates.push({ x, y, distance });
+      }
+    }
+    candidates.sort((a, b) => a.distance - b.distance);
+    return candidates[0] ?? null;
+  }
 
   static async summon(tamer, record) {
     if (!canvas?.scene) return ui.notifications.warn("A scene must be active.");
@@ -1076,7 +1113,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const records = this.records(tamer);
     if (await this.summonedRecord(records)) { ui.notifications.warn("Another companion is already summoned."); return false; }
     const tamerToken = this.tamerToken(tamer); if (!tamerToken) { ui.notifications.warn("Place the Tamer's token on the current scene first."); return false; }
-    const position = this.findAdjacentSpace(tamerToken); if (!position) { ui.notifications.warn("No adjacent unoccupied space was found."); return false; }
+    const position = this.findSummonSpace(tamerToken, 30); if (!position) { ui.notifications.warn("No unoccupied space within 30 feet and line of sight was found."); return false; }
     const tokenDoc = await actor.getTokenDocument(position), created = await canvas.scene.createEmbeddedDocuments("Token", [tokenDoc.toObject()]), target = records.find(r => r.id === record.id);
     if (!target || !created?.[0]) return false; target.tokenUuid = created[0].uuid; target.status = "summoned"; await this.save(tamer, records); ui.notifications.info(`${actor.name} has been summoned.`); return true;
   }
