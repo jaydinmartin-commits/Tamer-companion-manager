@@ -48,6 +48,15 @@
             <div class="tcm-vessel-field {{#unless vessel}}unavailable{{/unless}}"><span>Vessel</span>{{#if vessel}}<strong>{{vessel}}</strong>{{else}}<strong>No vessel assigned</strong>{{/if}}</div>
           </div>
 
+          {{#if splicer.enabled}}
+          <div class="tcm-improvements tcm-splicer-row">
+            <div><span>Splicer Augments</span><strong>{{splicer.spent}} pts{{#if splicer.pending}} · Pending{{/if}}</strong></div>
+            <button type="button" data-action="openSplicer" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}}>
+              <i class="fa-solid fa-dna"></i><span>Choose Augments</span>
+            </button>
+          </div>
+          {{/if}}
+
           <div class="tcm-improvements">
   <div><span>Improvements</span><strong>{{progression.chosen}} / {{progression.target}}</strong></div>
   <button type="button" data-action="trainCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}} {{#if progression.target}}{{else}}disabled{{/if}}>
