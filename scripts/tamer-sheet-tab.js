@@ -7,12 +7,17 @@ class TamerCompanionSheetTab {
   static rootOf(app, element) {
     if (element instanceof HTMLElement) return element;
     if (element?.[0] instanceof HTMLElement) return element[0];
-    if (app?.element instanceof HTMLElement) return app.element;
-    return null;
+    return app?.element instanceof HTMLElement ? app.element : null;
   }
 
   static actorOf(app) {
     return app?.actor ?? app?.document ?? null;
+  }
+
+  static findBody(root) {
+    return root.querySelector(".sheet-body")
+      ?? root.querySelector(".sheet-content")
+      ?? root.querySelector(".window-content");
   }
 
   static async attach(app, element) {
@@ -22,13 +27,8 @@ class TamerCompanionSheetTab {
     if (!(actor.isOwner || game.user.isGM)) return;
 
     const nav = root.querySelector("nav.sheet-tabs, nav.tabs, [role='tablist']");
-    if (!nav) return;
-
-    let body = root.querySelector(".sheet-body");
-    if (!body) {
-      body = root.querySelector(".window-content");
-    }
-    if (!body) return;
+    const body = this.findBody(root);
+    if (!nav || !body) return;
 
     let tab = nav.querySelector(`[data-tab="${TAB_ID}"]`);
     if (!tab) {
@@ -47,7 +47,6 @@ class TamerCompanionSheetTab {
       content = document.createElement("div");
       content.className = "tab tcm-sheet-tab-content";
       content.dataset.tab = TAB_ID;
-      content.hidden = true;
       body.appendChild(content);
     }
 
@@ -58,19 +57,23 @@ class TamerCompanionSheetTab {
       controller._tcmSheetContent = content;
       this.controllers.set(app, controller);
 
-      tab.addEventListener("click", async event => {
+      tab.addEventListener("click", event => {
         event.preventDefault();
         event.stopImmediatePropagation();
-        await this.activate(root, nav, body, tab, content, controller);
-      });
+        void this.activate(root, nav, body, tab, content, controller);
+      }, true);
 
-      content.addEventListener("click", event => this.action(event, controller), true);
-      content.addEventListener("change", event => this.change(event, controller), true);
+      content.addEventListener("click", event => { void this.action(event, controller); }, true);
+      content.addEventListener("change", event => { void this.change(event, controller); }, true);
     }
 
     controller.tamer = actor;
     controller._tcmSheetContent = content;
     await this.render(controller);
+
+    if (tab.classList.contains("active")) {
+      await this.activate(root, nav, body, tab, content, controller);
+    }
   }
 
   static async render(controller) {
@@ -80,6 +83,7 @@ class TamerCompanionSheetTab {
     const vesselItems = [...(controller.tamer.items?.contents ?? [])]
       .filter(item => item?.documentName === "Item" && item.type !== "class")
       .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+
     for (const companion of context.companions ?? []) {
       const record = records[companion.index];
       companion.vessels = vesselItems
@@ -91,6 +95,7 @@ class TamerCompanionSheetTab {
           selected: item.uuid === record?.vesselUuid
         }));
     }
+
     controller._tcmSheetContent.innerHTML = await renderTemplate(
       `modules/${MODULE_ID}/templates/companion-manager.hbs`,
       context
@@ -99,23 +104,22 @@ class TamerCompanionSheetTab {
   }
 
   static async activate(root, nav, body, tab, content, controller) {
-    const group = nav.dataset.group;
     for (const link of nav.querySelectorAll("[data-tab]")) {
-      if (group && link.dataset.group && link.dataset.group !== group) continue;
       link.classList.toggle("active", link === tab);
       link.setAttribute("aria-selected", link === tab ? "true" : "false");
     }
 
     for (const section of body.querySelectorAll(".tab[data-tab]")) {
       if (section === content) continue;
-      if (group && section.dataset.group && section.dataset.group !== group) continue;
       section.classList.remove("active");
       section.hidden = true;
     }
 
     tab.classList.add("active");
-    content.classList.add("active");
     content.hidden = false;
+    content.classList.add("active");
+    content.style.display = "flex";
+    content.style.pointerEvents = "auto";
     await this.render(controller);
   }
 
@@ -123,16 +127,20 @@ class TamerCompanionSheetTab {
     const target = event.target?.closest?.("[data-action]");
     if (!target || !controller._tcmSheetContent.contains(target)) return;
 
+    event.preventDefault();
+    event.stopPropagation();
+
     const action = target.dataset.action;
     const index = Number(target.dataset.index);
     const records = TamerCompanionManager.records(controller.tamer);
     const record = records[index];
 
-    event.preventDefault();
-    event.stopPropagation();
-
     try {
       if (action === "refresh") return this.render(controller);
+
+      if (action === "openTamer") {
+        return controller.tamer.sheet?.render({ force: true });
+      }
 
       if (action === "addCompanion") {
         const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(controller.tamer));
@@ -141,34 +149,36 @@ class TamerCompanionSheetTab {
         return;
       }
 
+      if (!record) return;
+
       if (action === "openCompanion") {
-        const actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+        const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
         return actor?.sheet?.render({ force: true });
       }
 
-      if (action === "summonCompanion" && record) {
+      if (action === "summonCompanion") {
         await TamerCompanionManager.summon(controller.tamer, record);
         return this.render(controller);
       }
 
-      if (action === "dismissCompanion" && record) {
+      if (action === "dismissCompanion") {
         await TamerCompanionManager.dismiss(controller.tamer, record);
         return this.render(controller);
       }
 
-      if (action === "clearVessel" && record) {
+      if (action === "clearVessel") {
         await TamerCompanionManager.clearVessel(controller.tamer, record);
         return this.render(controller);
       }
 
-      if (action === "trainCompanion" && record) {
+      if (action === "trainCompanion") {
         const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
         if (!actor) return;
         await TamerCompanionManager.manageImprovements(controller.tamer, record, actor);
         return this.render(controller);
       }
 
-      if (action === "unlinkCompanion" && record) {
+      if (action === "unlinkCompanion") {
         const yes = await foundry.applications.api.DialogV2.confirm({
           window: { title: "Unlink Companion" },
           content: `<p>Unlink <strong>${foundry.utils.escapeHTML(record.name ?? "this companion")}</strong>?</p>`,
@@ -210,6 +220,7 @@ class TamerCompanionSheetTab {
       ui.notifications.warn("The selected vessel is not a valid Item on this Tamer.");
       return;
     }
+
     await TamerCompanionManager.setVessel(controller.tamer, record, item);
     await this.render(controller);
   }
