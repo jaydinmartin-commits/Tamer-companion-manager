@@ -41,7 +41,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const token = await fromUuid(record.tokenUuid).catch(() => null);
       if (!token) { record.tokenUuid = null; record.status = "in-vessel"; stateChanged = true; }
     }
-    if (stateChanged) await TamerCompanionManager.save(this.tamer, records);
+    // Vessel records are also reconciled here so deleted/transferred Items do not leave dead associations.\n    for (const record of records) {\n      if (!record?.vesselUuid) continue;\n      const vessel = await TamerCompanionManager.getVessel(record, this.tamer);\n      if (!vessel) {\n        record.vesselUuid = null;\n        record.vesselName = "";\n        stateChanged = true;\n      }\n    }\n    if (stateChanged) await TamerCompanionManager.save(this.tamer, records);
     const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; const vessel = await TamerCompanionManager.getVessel(record, this.tamer); return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: vessel?.name ?? record.vesselName ?? "No vessel assigned", vesselImg: vessel?.img ?? "icons/svg/item-bag.svg", vesselEquipped: Boolean(vessel?.system?.equipped), linked: Boolean(actor), summoned: Boolean(token), progression }; }));
     const soulBondFeature = TamerCompanionManager.getSoulBondFeature(this.tamer);
     const soulBond = soulBondFeature ? { current: Number(soulBondFeature.system?.uses?.value ?? 0), max: Number(soulBondFeature.system?.uses?.max ?? 0) } : { current: 0, max: 0 };
@@ -1654,6 +1654,30 @@ Hooks.once("init", () => {
     if (manager && TamerCompanionManager._internalAdvancementManagers.has(manager)) return;
     await syncTamerCompanionAdvancement(manager?.actor);
   });
+  // If a vessel Item is deleted outside the manager, remove only the dead
+  // vessel association. The companion Actor and Pocket Family record remain intact.
+  Hooks.on("deleteItem", async item => {
+    if (!item?.uuid || item.type === "class") return;
+    const actors = [...(game.actors?.contents ?? [])];
+    for (const tamer of actors) {
+      if (!TamerCompanionManager.isTamer(tamer)) continue;
+      const records = TamerCompanionManager.records(tamer);
+      let changed = false;
+      for (const record of records) {
+        if (record?.vesselUuid !== item.uuid) continue;
+        record.vesselUuid = null;
+        record.vesselName = "";
+        changed = true;
+      }
+      if (changed && (tamer.isOwner || game.user.isGM)) {
+        await TamerCompanionManager.save(tamer, records);
+        for (const app of Object.values(ui.windows ?? {})) {
+          if (app instanceof TamerCompanionManager && app.tamer?.id === tamer.id) await app.render({ force: true });
+        }
+      }
+    }
+  });
+
   Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
     if (config?.type !== "short" || !TamerCompanionManager.isTamer(actor)) return;
     if (!(actor.isOwner || game.user.isGM)) return;
