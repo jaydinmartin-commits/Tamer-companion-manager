@@ -89,7 +89,7 @@ class TamerCompanionSheetTab {
     const records = TamerCompanionManager.records(controller.tamer);
     const assigned = new Set(records.map(record => record?.vesselUuid).filter(Boolean));
     const vesselItems = [...(controller.tamer.items?.contents ?? [])]
-      .filter(item => item?.documentName === "Item" && item.type !== "class")
+      .filter(item => TamerCompanionManager.isValidVesselItem(item))
       .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
 
     for (const companion of context.companions ?? []) {
