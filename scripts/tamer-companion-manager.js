@@ -602,13 +602,18 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const target = Math.max(0, Number(level) - 1);
     const asiLevels = [4, 8, 12, 16, 19];
     const asiHitDice = asiLevels.filter(l => Number(level) >= l).length;
+    const bespokeTree = record?.bespokeTreeId ?? null;
+    const sharedResilienceLevels = bespokeTree ? [3, 5, 11, 17] : [];
+    const sharedResilienceHitDice = sharedResilienceLevels.filter(l => Number(level) >= l).length;
     return {
       target,
       chosen,
       pending: Math.max(0, target - chosen),
       asiHitDice,
       bonusHitDice: asiHitDice,
-      bespokeTree: record?.bespokeTreeId ?? null
+      sharedResilienceHitDice,
+      totalBonusHitDice: asiHitDice + sharedResilienceHitDice,
+      bespokeTree
     };
   }
 
@@ -831,7 +836,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const record of records) {
       const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
       if (!actor) continue;
-      const target = this.getProgression(record, actor, level).bonusHitDice;
+      const target = this.getProgression(record, actor, level).totalBonusHitDice;
       const before = this.getAppliedHitDice(record);
 
       if (target < before) {
@@ -992,7 +997,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     records.push(record);
-    const targetHitDice = TamerCompanionManager.getProgression(record, actor, TamerCompanionManager.getTamerLevel(this.tamer)).bonusHitDice;
+    const targetHitDice = TamerCompanionManager.getProgression(record, actor, TamerCompanionManager.getTamerLevel(this.tamer)).totalBonusHitDice;
     if (targetHitDice > 0) {
       const applied = await TamerCompanionManager.applyCompanionHitDice(this.tamer, record, actor, targetHitDice, TamerCompanionManager.getTamerLevel(this.tamer));
       if (!applied) ui.notifications.info(`${actor.name} was bonded successfully; its bonus Hit Die training remains pending.`);
