@@ -92,3 +92,8 @@ Progression hardening release: corrected ASI-level Hit Die tracking, improved pr
 <!-- v0.1.60 release-package trigger -->
 
 <!-- v0.1.61 release-package trigger -->
+
+
+## v0.1.64
+- Prevent improvement selection from opening during level-down rollback.
+- Resolve companion Hit Dice before opening the improvement selection screen on level-up.
