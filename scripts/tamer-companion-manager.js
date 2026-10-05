@@ -40,8 +40,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     super(options);
     this.tamer = options.tamer ?? null;
     this._tcmDragDrop = new foundry.applications.ux.DragDrop({ dragSelector: null, dropSelector: ".tcm-drop-zone", permissions: { drop: selector => this._canAcceptCompanionDrop(selector) }, callbacks: { drop: event => this._onDropManager(event), dragover: event => this._onDragOverManager(event) } });
-    this._onNativeVesselDrop = this._onNativeVesselDrop.bind(this);
-    this._onNativeVesselDragOver = this._onNativeVesselDragOver.bind(this);
   }
 
   static DEFAULT_OPTIONS = { id: "tamer-companion-manager", classes: ["tamer-companion-manager"], window: { title: "Tamer Companions", icon: "fa-solid fa-paw", resizable: true }, position: { width: 760, height: 650 }, actions: { refresh: this._onRefresh, addCompanion: this._onAddCompanion, openCompanion: this._onOpenCompanion, summonCompanion: this._onSummonCompanion, dismissCompanion: this._onDismissCompanion, unlinkCompanion: this._onUnlinkCompanion, openTamer: this._onOpenTamer, trainCompanion: this._onTrainCompanion, clearVessel: this._onClearVessel } };
@@ -73,7 +71,17 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const token = await fromUuid(record.tokenUuid).catch(() => null);
       if (!token) { record.tokenUuid = null; record.status = "in-vessel"; stateChanged = true; }
     }
-    // Vessel records are also reconciled here so deleted/transferred Items do not leave dead associations.\n    for (const record of records) {\n      if (!record?.vesselUuid) continue;\n      const vessel = await TamerCompanionManager.getVessel(record, this.tamer);\n      if (!vessel) {\n        record.vesselUuid = null;\n        record.vesselName = "";\n        stateChanged = true;\n      }\n    }\n    if (stateChanged) await TamerCompanionManager.save(this.tamer, records);
+    // Vessel records are also reconciled here so deleted/transferred Items do not leave dead associations.
+    for (const record of records) {
+      if (!record?.vesselUuid) continue;
+      const vessel = await TamerCompanionManager.getVessel(record, this.tamer);
+      if (!vessel) {
+        record.vesselUuid = null;
+        record.vesselName = "";
+        stateChanged = true;
+      }
+    }
+    if (stateChanged) await TamerCompanionManager.save(this.tamer, records);
     const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; const vessel = await TamerCompanionManager.getVessel(record, this.tamer); return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: vessel?.name ?? record.vesselName ?? "No vessel assigned", vesselImg: vessel?.img ?? "icons/svg/item-bag.svg", vesselEquipped: Boolean(vessel?.system?.equipped), linked: Boolean(actor), summoned: Boolean(token), progression }; }));
     const soulBondFeature = TamerCompanionManager.getSoulBondFeature(this.tamer);
     const soulBond = soulBondFeature ? { current: Number(soulBondFeature.system?.uses?.value ?? 0), max: Number(soulBondFeature.system?.uses?.max ?? 0) } : { current: 0, max: 0 };
@@ -114,6 +122,15 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     ui.notifications.info(`${item.name} is now the vessel for ${target.name ?? "this companion"}.`);
     return true;
   }
+  static async refreshOpenManagers(tamer) {
+    if (!tamer) return;
+    for (const app of Object.values(ui.windows ?? {})) {
+      if (app instanceof TamerCompanionManager && app.tamer?.id === tamer.id) {
+        await app.render({ force: true });
+      }
+    }
+  }
+
   static async clearVessel(tamer, record) {
     const records = this.records(tamer), target = records.find(r => r.id === record?.id);
     if (!target) return false;
@@ -1104,11 +1121,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
       if (changed) await this.save(tamer, records);
       if (notify && changed) {
-        for (const app of Object.values(ui.windows ?? {})) {
-          if (app instanceof TamerCompanionManager && app.tamer?.id === tamer.id) {
-            await app.render({ force: true });
-          }
-        }
+                  await TamerCompanionManager.refreshOpenManagers(tamer);
       }
       return changed;
     })();
@@ -1302,20 +1315,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if (event.target.closest(".tcm-vessel-drop-zone")) return this._onDropVessel(event);
     return this._onDropCompanion(event);
   }
-  _onNativeVesselDragOver(event) {
-    const zone = event.target?.closest?.(".tcm-vessel-drop-zone");
-    if (!zone) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
-  }
-  async _onNativeVesselDrop(event) {
-    const zone = event.target?.closest?.(".tcm-vessel-drop-zone");
-    if (!zone) return;
-    event.preventDefault();
-    event.stopPropagation();
-    await this._onDropVessel(event);
-  }
   async _onDropVessel(event) {
     const zone = event.target.closest(".tcm-vessel-drop-zone"), index = Number(zone?.dataset.index);
     const record = TamerCompanionManager.records(this.tamer)[index];
@@ -1329,7 +1328,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
   async _onDropCompanion(event) {
     event.preventDefault();
-    if (!this._canAcceptCompanionDrop(event)) return ui.notifications.warn("No Pocket Family slot is available.");
+    if (!this._canAcceptCompanionDrop(".tcm-drop-zone")) return ui.notifications.warn("No Pocket Family slot is available.");
     const data = TextEditor.getDragEventData(event);
     if (data?.type !== "Actor") return ui.notifications.warn("Only Actor documents can be added as companions.");
     let actor = data.uuid ? await fromUuid(data.uuid).catch(() => null) : null;
@@ -1396,8 +1395,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     await super._onRender(context, options);
     if (!this.element) return;
     this._tcmDragDrop.bind(this.element);
-    this.element.addEventListener("dragover", this._onNativeVesselDragOver);
-    this.element.addEventListener("drop", this._onNativeVesselDrop);
   }
   static async _onRefresh() { await this.render({ force: true }); }
 
@@ -1858,11 +1855,7 @@ Hooks.once("init", () => {
       // advancement-complete hooks have no level transition to trigger a picker.
       TamerCompanionManager._pendingLevelTransitions.delete(transitionKey);
 
-      for (const app of Object.values(ui.windows ?? {})) {
-        if (app instanceof TamerCompanionManager && app.tamer?.id === actor.id) {
-          await app.render({ force: true });
-        }
-      }
+              await TamerCompanionManager.refreshOpenManagers(actor);
     } catch (error) {
       console.error("[Tamer Companion Manager] Companion advancement synchronization failed.", error);
       ui.notifications.error("Companion advancement could not be synchronized. See the console for details.");
@@ -1874,9 +1867,7 @@ Hooks.once("init", () => {
     if (!(actor.isOwner || game.user.isGM)) return;
     try {
       if (await TamerCompanionManager.syncCompanionHitDice(actor)) {
-        for (const app of Object.values(ui.windows ?? {})) {
-          if (app instanceof TamerCompanionManager && app.tamer?.id === actor.id) await app.render({ force: true });
-        }
+                  await TamerCompanionManager.refreshOpenManagers(actor);
       }
     } catch (error) {
       console.error("[Tamer Companion Manager] Companion Hit Die synchronization failed.", error);
@@ -1942,9 +1933,7 @@ Hooks.once("init", () => {
       }
       if (changed && (tamer.isOwner || game.user.isGM)) {
         await TamerCompanionManager.save(tamer, records);
-        for (const app of Object.values(ui.windows ?? {})) {
-          if (app instanceof TamerCompanionManager && app.tamer?.id === tamer.id) await app.render({ force: true });
-        }
+                  await TamerCompanionManager.refreshOpenManagers(tamer);
       }
     }
   });
@@ -1954,9 +1943,7 @@ Hooks.once("init", () => {
     if (!(actor.isOwner || game.user.isGM)) return;
     try {
       if (await TamerCompanionManager.openSoulBond(actor)) {
-        for (const app of Object.values(ui.windows ?? {})) {
-          if (app instanceof TamerCompanionManager && app.tamer?.id === actor.id) await app.render({ force: true });
-        }
+                  await TamerCompanionManager.refreshOpenManagers(actor);
       }
     } catch (error) {
       console.error("[Tamer Companion Manager] Soul Bond short-rest handling failed.", error);
