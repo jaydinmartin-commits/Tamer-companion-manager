@@ -186,8 +186,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const normalized = this.normalizeImprovementName(name);
       if (!normalized) continue;
       if (this.actorHasImprovement(actor, name)) continue;
-      const sourceUuid = optionsByName.get(normalized);
-      if (!sourceUuid || !selectedSourceUuids.has(sourceUuid)) missing.push(name);
+      const sourceUuids = optionsByName.get(normalized) ?? new Set();
+      if (![...sourceUuids].some(uuid => selectedSourceUuids.has(uuid))) missing.push(name);
     }
 
     return { eligible: missing.length === 0, prerequisite: prereq.text, missing };
@@ -222,7 +222,13 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const esc = value => foundry.utils.escapeHTML(String(value ?? ""));
     const selectedUuids = new Set(selected.keys());
     const optionsByName = new Map();
-    for (const { item } of options) optionsByName.set(this.normalizeImprovementName(item.name), item.uuid);
+    for (const { item } of options) {
+      const key = this.normalizeImprovementName(item.name);
+      if (!key) continue;
+      const uuids = optionsByName.get(key) ?? new Set();
+      uuids.add(item.uuid);
+      optionsByName.set(key, uuids);
+    }
 
     // Level requirements come from the improvement Item's prerequisite text,
     // while the actual Tamer level is read from the Tamer's Tamer class Item.
@@ -238,7 +244,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const visibleEntries = mergedEntries.filter(({ item }) => {
       const prereq = this.parseImprovementPrerequisites(item);
-      return !prereq.freeOnTaming && (!prereq.level || level >= prereq.level);
+      return !prereq.freeOnTaming && (selected.has(item.uuid) || !prereq.level || level >= prereq.level);
     });
 
     const groupHtml = `
@@ -385,8 +391,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             if (prereq.level && level < prereq.level) missing.push(`Tamer level ${prereq.level}`);
             for (const name of prereq.names ?? []) {
               if (this.actorHasImprovement(actor, name)) continue;
-              const uuid = optionsByName.get(this.normalizeImprovementName(name));
-              if (!uuid || !selectedNow.has(uuid)) missing.push(name);
+              const uuids = optionsByName.get(this.normalizeImprovementName(name)) ?? new Set();
+              if (![...uuids].some(uuid => selectedNow.has(uuid))) missing.push(name);
             }
 
             const option = input.closest(".tcm-advancement-option");
@@ -511,8 +517,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         return result;
       };
 
-      const hookId = Hooks.once("dnd5e.advancementManagerComplete", async completedManager => {
+      const hookId = Hooks.on("dnd5e.advancementManagerComplete", async completedManager => {
         if (completedManager !== manager) return;
+        Hooks.off("dnd5e.advancementManagerComplete", hookId);
         completed = true;
         const created = actor.items.find(item => item.flags?.dnd5e?.sourceId === sourceUuid)
           ?? actor.items.find(item => item.name === data.name && item.id !== data._id);
@@ -593,13 +600,14 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     // Monster Trainer grants one improvement whenever you gain a level beyond 1st.
     // Therefore a 1st-level Tamer has 0 choices, a 2nd-level Tamer has 1, etc.
     const target = Math.max(0, Number(level) - 1);
-    const bespokeHitDice = record?.bespokeTreeId ? [3, 5, 11, 17].filter(l => Number(level) >= l).length : 0;
+    const asiLevels = [4, 8, 12, 16, 19];
+    const asiHitDice = asiLevels.filter(l => Number(level) >= l).length;
     return {
       target,
       chosen,
       pending: Math.max(0, target - chosen),
-      bespokeHitDice,
-      bonusHitDice: bespokeHitDice,
+      asiHitDice,
+      bonusHitDice: asiHitDice,
       bespokeTree: record?.bespokeTreeId ?? null
     };
   }
