@@ -77,7 +77,17 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const token = await fromUuid(record.tokenUuid).catch(() => null);
       if (!token) { record.tokenUuid = null; record.status = "in-vessel"; stateChanged = true; }
     }
-    // Vessel records are also reconciled here so deleted/transferred Items do not leave dead associations.\n    for (const record of records) {\n      if (!record?.vesselUuid) continue;\n      const vessel = await TamerCompanionManager.getVessel(record, this.tamer);\n      if (!vessel) {\n        record.vesselUuid = null;\n        record.vesselName = "";\n        stateChanged = true;\n      }\n    }\n    if (stateChanged) await TamerCompanionManager.save(this.tamer, records);
+    // Vessel records are also reconciled here so deleted/transferred Items do not leave dead associations.
+    for (const record of records) {
+      if (!record?.vesselUuid) continue;
+      const vessel = await TamerCompanionManager.getVessel(record, this.tamer);
+      if (!vessel) {
+        record.vesselUuid = null;
+        record.vesselName = "";
+        stateChanged = true;
+      }
+    }
+    if (stateChanged) await TamerCompanionManager.save(this.tamer, records);
     const companions = await Promise.all(records.map(async (record, index) => {
       const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
       const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null;
@@ -350,7 +360,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         .trim();
     } else {
       const text = this.getImprovementDescription(item);
-      const match = text.match(/Prerequisite\s*:\s*([^\n.]+)/i);
+      const match = text.match(/Prerequisite\s*:\s*([^
+.]+)/i);
       if (!match) return { text: "", level: 0, names: [] };
       raw = match[1].trim();
     }
