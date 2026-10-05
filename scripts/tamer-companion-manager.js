@@ -637,7 +637,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const average = Math.floor(die / 2) + 1;
     const con = this.getCompanionConstitutionModifier(actor);
     const previousHP = Number(actor.system?.attributes?.hp?.max ?? actor.system?.attributes?.hp?.value ?? 0);
-    const averageGain = Math.max(average + con, 1);
+    const averageGain = Math.max(average + con, 0);
     const averageFinal = previousHP + averageGain;
     const stepText = total > 1 ? `Step ${index} of ${total}` : "Step 1 of 1";
     const initialChoice = defaultAverage ? "average" : "roll";
@@ -738,7 +738,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             rolledValue = Number(roll.total);
           }
 
-          const gain = Math.max(rolledValue + con, 1);
+          const gain = Math.max(rolledValue + con, 0);
           gainEl.textContent = gain;
           finalEl.textContent = previousHP + gain;
           methodEl.textContent = "ROLL.";
@@ -772,7 +772,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     let hpGain = 0;
     const appliedChoices = foundry.utils.deepClone(record.hitDiceChoices ?? {});
     for (const choice of choices) {
-      const gain = Math.max(choice.raw + con, 1);
+      const gain = Math.max(choice.raw + con, 0);
       hpGain += gain;
       const nextIndex = applied + Object.keys(appliedChoices).length + 1;
       appliedChoices[String(nextIndex)] = {level: Number(level), mode: choice.mode, die: choice.die, roll: choice.raw, con, hpGain: gain};
