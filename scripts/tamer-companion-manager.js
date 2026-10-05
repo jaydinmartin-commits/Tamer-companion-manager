@@ -167,27 +167,41 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static getSplicerAssignments(record) {
-    return Array.isArray(record?.splicer?.augments)
-      ? foundry.utils.deepClone(record.splicer.augments)
-      : [];
+    return Array.isArray(record?.splicer?.augments) ? foundry.utils.deepClone(record.splicer.augments) : [];
   }
 
-  static getSplicerSpentPoints(record) {
-    const registry = new Map(this.getSplicerAugmentRegistry().map(augment => [String(augment.id), augment]));
-    return this.getSplicerAssignments(record).reduce((total, entry) => {
+  static getSplicerPendingAssignments(record) {
+    return Array.isArray(record?.splicer?.pendingAugments)
+      ? foundry.utils.deepClone(record.splicer.pendingAugments)
+      : this.getSplicerAssignments(record);
+  }
+
+  static getSplicerSpentPoints(record, assignments = null) {
+    const registry = new Map(this.getSplicerAugmentRegistry().map(a => [String(a.id), a]));
+    const source = Array.isArray(assignments) ? assignments : this.getSplicerAssignments(record);
+    return source.reduce((total, entry) => {
       const augment = registry.get(String(entry?.id));
-      const count = Math.max(0, Number(entry?.count ?? 0));
-      return total + (augment ? Number(augment.cost ?? 0) * count : 0);
+      return total + (augment ? Number(augment.cost ?? 0) * Math.max(0, Math.floor(Number(entry?.count ?? 0))) : 0);
     }, 0);
   }
 
-  static getSplicerAvailablePoints(tamer, record) {
-    return Math.max(0, this.getSplicerTotalPoints(tamer) - this.getSplicerSpentPoints(record));
+  static getSplicerSharedSpentPoints(tamer, excludeRecordId = null) {
+    return this.records(tamer).reduce((total, record) => {
+      if (!record || (excludeRecordId && record.id === excludeRecordId)) return total;
+      return total + this.getSplicerSpentPoints(record, this.getSplicerPendingAssignments(record));
+    }, 0);
+  }
+
+  static getSplicerAvailablePoints(tamer, record = null, assignments = null) {
+    const total = this.getSplicerTotalPoints(tamer);
+    const otherSpent = this.getSplicerSharedSpentPoints(tamer, record?.id ?? null);
+    const currentSpent = record ? this.getSplicerSpentPoints(record, assignments ?? this.getSplicerPendingAssignments(record)) : 0;
+    return Math.max(0, total - otherSpent - currentSpent);
   }
 
   static validateSplicerAssignments(tamer, record, assignments) {
     const level = this.getTamerLevel(tamer);
-    const registry = new Map(this.getSplicerAugmentRegistry().map(augment => [String(augment.id), augment]));
+    const registry = new Map(this.getSplicerAugmentRegistry().map(a => [String(a.id), a]));
     const normalized = [];
     const seen = new Set();
     const errors = [];
@@ -197,46 +211,37 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const count = Math.floor(Number(raw?.count ?? 0));
       if (!id || count <= 0) continue;
       const augment = registry.get(id);
-      if (!augment) {
-        errors.push(`Unknown Splicer augment: ${id}`);
-        continue;
-      }
-      if (seen.has(id)) {
-        errors.push(`Duplicate Splicer augment entry: ${augment.name}`);
-        continue;
-      }
+      if (!augment) { errors.push(`Unknown Splicer augment: ${id}`); continue; }
+      if (seen.has(id)) { errors.push(`Duplicate Splicer augment entry: ${augment.name}`); continue; }
       seen.add(id);
 
       const maxCount = Number(augment.maxCount ?? (augment.repeatable ? 999 : 1));
       if (!augment.repeatable && count > 1) errors.push(`${augment.name} cannot be taken more than once.`);
-      if (count > maxCount) errors.push(`${augment.name} can be taken at most ${maxCount} time${maxCount === 1 ? "" : "s"}.`);
+      if (count > maxCount) errors.push(`${augment.name} can be taken at most ${maxCount} times.`);
       if (count > 1 && augment.minLevelForSecond && level < Number(augment.minLevelForSecond)) {
         errors.push(`${augment.name} requires Tamer level ${augment.minLevelForSecond} for its second application.`);
       }
-      if (augment.exclusiveGroup) {
-        const conflicting = normalized.find(entry => {
-          const other = registry.get(String(entry.id));
-          return other?.exclusiveGroup === augment.exclusiveGroup && String(entry.id) !== id;
-        });
-        if (conflicting) errors.push(`${augment.name} cannot be combined with ${conflicting.name}.`);
-      }
-
       normalized.push({ id, count });
     }
 
-    const spent = normalized.reduce((total, entry) => {
+    for (const entry of normalized) {
       const augment = registry.get(entry.id);
-      return total + Number(augment?.cost ?? 0) * entry.count;
-    }, 0);
+      if (!augment?.exclusiveGroup) continue;
+      const conflict = normalized.find(other => other.id !== entry.id && registry.get(other.id)?.exclusiveGroup === augment.exclusiveGroup);
+      if (conflict) errors.push(`${augment.name} cannot be combined with ${registry.get(conflict.id)?.name ?? conflict.id}.`);
+    }
 
+    const spent = this.getSplicerSpentPoints(record, normalized);
     const total = this.getSplicerTotalPoints(tamer);
-    if (spent > total) errors.push(`Splicer Points exceeded: ${spent}/${total} spent.`);
+    const otherSpent = this.getSplicerSharedSpentPoints(tamer, record?.id ?? null);
+    const sharedSpent = otherSpent + spent;
+    if (sharedSpent > total) errors.push(`Shared Splicer Points exceeded: ${sharedSpent}/${total} spent.`);
 
-    return { valid: errors.length === 0, errors, assignments: normalized, spent, total, available: Math.max(0, total - spent) };
+    return { valid: errors.length === 0, errors, assignments: normalized, spent, otherSpent, sharedSpent, total, available: Math.max(0, total - sharedSpent) };
   }
 
   static async setSplicerAssignments(tamer, record, assignments) {
-    if (!tamer || !record) return false;
+    if (!tamer || !record || !this.isSplicer(tamer)) return false;
     const validation = this.validateSplicerAssignments(tamer, record, assignments);
     if (!validation.valid) {
       ui.notifications.error(validation.errors[0] ?? "The Splicer augment selection is invalid.");
@@ -246,9 +251,71 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const target = records.find(entry => entry.id === record.id);
     if (!target) return false;
     target.splicer ??= {};
-    target.splicer.augments = validation.assignments;
+    target.splicer.pendingAugments = validation.assignments;
     await this.save(tamer, records);
     return true;
+  }
+
+  static async syncSplicerAugmentItems(record, assignments) {
+    if (!record?.actorUuid) return false;
+    const actor = await fromUuid(record.actorUuid).catch(() => null);
+    if (!actor) return false;
+
+    const tagged = actor.items.filter(item => item.flags?.[MODULE_ID]?.splicerAugment?.recordId === record.id);
+    if (tagged.length) await actor.deleteEmbeddedDocuments("Item", tagged.map(item => item.id));
+
+    const registry = new Map(this.getSplicerAugmentRegistry().map(a => [String(a.id), a]));
+    const create = [];
+    for (const entry of assignments ?? []) {
+      const augment = registry.get(String(entry?.id));
+      const count = Math.max(0, Math.floor(Number(entry?.count ?? 0)));
+      if (!augment || !count) continue;
+      const source = augment.uuid ? await fromUuid(augment.uuid).catch(() => null) : null;
+      if (!source || source.documentName !== "Item") continue;
+
+      for (let n = 1; n <= count; n++) {
+        const data = source.toObject();
+        delete data._id;
+        data.flags ??= {};
+        data.flags[MODULE_ID] ??= {};
+        data.flags[MODULE_ID].splicerAugment = {
+          recordId: record.id,
+          augmentId: String(augment.id),
+          application: n
+        };
+        create.push(data);
+      }
+    }
+    if (create.length) await actor.createEmbeddedDocuments("Item", create);
+    await this.refreshActorSheets(actor);
+    return true;
+  }
+
+  static async applyPendingSplicerChanges(tamer) {
+    if (!tamer || !this.isSplicer(tamer)) return false;
+    const records = this.records(tamer);
+    let changed = false;
+
+    for (const record of records) {
+      const pending = Array.isArray(record?.splicer?.pendingAugments) ? record.splicer.pendingAugments : null;
+      if (!pending) continue;
+      await this.syncSplicerAugmentItems(record, pending);
+      record.splicer.augments = foundry.utils.deepClone(pending);
+      delete record.splicer.pendingAugments;
+      changed = true;
+    }
+
+    if (changed) await this.save(tamer, records);
+    return changed;
+  }
+
+  static async clearSplicerAugmentItems(record) {
+    if (!record?.actorUuid) return;
+    const actor = await fromUuid(record.actorUuid).catch(() => null);
+    if (!actor) return;
+    const tagged = actor.items.filter(item => item.flags?.[MODULE_ID]?.splicerAugment?.recordId === record.id);
+    if (tagged.length) await actor.deleteEmbeddedDocuments("Item", tagged.map(item => item.id));
+    await this.refreshActorSheets(actor);
   }
 
   static getStandardImprovementSources() { return foundry.utils.deepClone(game.settings.get(MODULE_ID, "standardImprovementSources") ?? []); }
