@@ -1276,7 +1276,7 @@ Hooks.once("init", () => {
   };
 
   Hooks.on("updateItem", async (item, changes, options) => {
-    if (!options?.isAdvancement || item?.type !== "class") return;
+    if (item?.type !== "class") return;
     const actor = item.parent;
     if (!actor || !TamerCompanionManager.isTamer(actor)) return;
     if (!Object.hasOwn(changes?.system ?? {}, "levels")) return;
