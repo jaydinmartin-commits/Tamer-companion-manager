@@ -626,14 +626,26 @@
   min-width:0;
   min-height:0;
   overflow:auto;
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));
-  align-content:start;
-  padding:8px 0 10px;
+  display:flex;
+  flex-wrap:wrap;
+  align-content:flex-start;
+  align-items:flex-start;
+  justify-content:flex-start;
+  gap:10px;
+  padding:8px 2px 12px;
 }
 .tcm-sheet-tab-content[data-tab="tcm-companions"] .tcm-card{
-  min-width:0;
+  flex:0 1 360px;
+  width:360px;
+  max-width:100%;
+  min-width:280px;
+  min-height:0;
+  align-self:flex-start;
   box-shadow:none;
+}
+.tcm-sheet-tab-content[data-tab="tcm-companions"] .tcm-card .tcm-card-body{
+  height:auto;
+  min-height:0;
 }
 .tcm-sheet-tab-content[data-tab="tcm-companions"] .tcm-bottom-info,
 .tcm-sheet-tab-content[data-tab="tcm-companions"] .tcm-footer{
