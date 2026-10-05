@@ -32,10 +32,10 @@ class TamerCompanionSheetTab {
 
     let tab = nav.querySelector(`[data-tab="${TAB_ID}"]`);
     if (!tab) {
-      tab = document.createElement("a");
+      tab = document.createElement("button");
       tab.className = "item tcm-sheet-tab";
       tab.dataset.tab = TAB_ID;
-      tab.href = "#";
+      tab.type = "button";
       tab.innerHTML = '<i class="fa-solid fa-paw" aria-hidden="true"></i>';
       tab.title = "Companions";
       tab.setAttribute("aria-label", "Companions");
@@ -53,16 +53,24 @@ class TamerCompanionSheetTab {
     let controller = this.controllers.get(app);
     if (!controller) {
       controller = Object.create(TamerCompanionManager.prototype);
-      controller.tamer = actor;
-      controller._tcmSheetContent = content;
       this.controllers.set(app, controller);
+    }
 
+    // Actor sheets can rebuild their DOM when an item is equipped/unequipped.
+    // Re-bind the embedded tab and content listeners to the NEW DOM nodes.
+    // Without this, the paw tab can lose its handler and fall through to the
+    // sheet's native tab/window handling.
+    if (!tab.dataset.tcmBound) {
+      tab.dataset.tcmBound = "true";
       tab.addEventListener("click", event => {
         event.preventDefault();
         event.stopImmediatePropagation();
         void this.activate(root, nav, body, tab, content, controller);
       }, true);
+    }
 
+    if (!content.dataset.tcmBound) {
+      content.dataset.tcmBound = "true";
       content.addEventListener("click", event => { void this.action(event, controller); }, true);
       content.addEventListener("change", event => { void this.change(event, controller); }, true);
     }
@@ -229,7 +237,6 @@ class TamerCompanionSheetTab {
 Hooks.once("init", () => {
   Hooks.on("renderActorSheetV2", (app, element) => TamerCompanionSheetTab.attach(app, element));
   Hooks.on("renderActorSheet", (app, html) => TamerCompanionSheetTab.attach(app, html));
-  Hooks.on("renderApplicationV2", (app, element) => TamerCompanionSheetTab.attach(app, element));
 });
 
 globalThis.TamerCompanionSheetTab = TamerCompanionSheetTab;
