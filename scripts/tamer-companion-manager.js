@@ -612,6 +612,97 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     };
   }
 
+  static getCompanionHitDie(actor) {
+    const denomination = Number(actor?.system?.attributes?.hd?.denomination ?? 0);
+    if (denomination > 0) return denomination;
+    const formula = String(actor?.system?.attributes?.hd?.formula ?? "").match(/d(4|6|8|10|12)/i);
+    return formula ? Number(formula[1]) : 8;
+  }
+  static getCompanionConstitutionModifier(actor) { return Number(actor?.system?.abilities?.con?.mod ?? 0); }
+  static getAppliedHitDice(record) { return Math.max(0, Number(record?.hitDiceApplied ?? 0)); }
+
+  static async promptCompanionHitDie(actor, {level, index, total, defaultAverage = false} = {}) {
+    const DialogV2 = foundry.applications.api.DialogV2;
+    if (!DialogV2) {
+      ui.notifications.error("Foundry's DialogV2 API is unavailable; the companion Hit Die could not be applied.");
+      return null;
+    }
+    const die = this.getCompanionHitDie(actor);
+    const average = Math.floor(die / 2) + 1;
+    const con = this.getCompanionConstitutionModifier(actor);
+    const averageGain = Math.max(average + con, 1);
+    const content = `
+      <p><strong>${actor.name}</strong> gains a bonus Hit Die from your Tamer training at Tamer level ${level}.</p>
+      <p>Choose how to determine the Hit Die's HP gain. Your Constitution modifier (${con >= 0 ? "+" : ""}${con}) is added afterward, with a minimum gain of 1 HP.</p>
+      <p><strong>Hit Die:</strong> d${die} &nbsp; <strong>Average:</strong> ${average} &nbsp; <strong>Average + CON:</strong> ${averageGain}</p>
+      ${total > 1 ? `<p><small>Bonus Hit Die ${index} of ${total} for this training update.</small></p>` : ""}
+    `;
+    const result = await DialogV2.wait({
+      window: { title: `Companion Hit Points — ${actor.name}` },
+      content, modal: true, rejectClose: false,
+      buttons: [
+        { action: "average", label: "Take Average", icon: "fa-solid fa-calculator", default: defaultAverage },
+        { action: "roll", label: `Roll d${die}`, icon: "fa-solid fa-dice-d20", default: !defaultAverage,
+          callback: async () => {
+            const roll = await new Roll(`1d${die}`).evaluate({async: true});
+            return {mode: "roll", die, raw: Number(roll.total)};
+          }
+        }
+      ]
+    });
+    if (result === null) return null;
+    if (result === "average") return {mode: "avg", die, raw: average};
+    return result?.mode === "roll" ? result : null;
+  }
+
+  static async applyCompanionHitDice(tamer, record, actor, targetCount, level) {
+    const applied = this.getAppliedHitDice(record);
+    const pending = Math.max(0, Number(targetCount) - applied);
+    if (!pending) return true;
+    const choices = [];
+    let defaultAverage = false;
+    for (let i = 0; i < pending; i++) {
+      const choice = await this.promptCompanionHitDie(actor, {level, index: i + 1, total: pending, defaultAverage});
+      if (!choice) return false;
+      choices.push(choice);
+      defaultAverage = choice.mode === "avg";
+    }
+    const con = this.getCompanionConstitutionModifier(actor);
+    let hpGain = 0;
+    const appliedChoices = foundry.utils.deepClone(record.hitDiceChoices ?? {});
+    for (const choice of choices) {
+      const gain = Math.max(choice.raw + con, 1);
+      hpGain += gain;
+      const nextIndex = applied + Object.keys(appliedChoices).length + 1;
+      appliedChoices[String(nextIndex)] = {level: Number(level), mode: choice.mode, die: choice.die, roll: choice.raw, con, hpGain: gain};
+    }
+    const hp = Number(actor.system?.attributes?.hp?.value ?? 0);
+    const hpMax = Number(actor.system?.attributes?.hp?.max ?? 0);
+    await actor.update({"system.attributes.hp.value": hp + hpGain, "system.attributes.hp.max": hpMax + hpGain});
+    record.hitDiceApplied = applied + pending;
+    record.hitDiceChoices = appliedChoices;
+    return true;
+  }
+
+  static async syncCompanionHitDice(tamer, {notify = true} = {}) {
+    if (!tamer || !this.isTamer(tamer)) return false;
+    const level = this.getTamerLevel(tamer), records = this.records(tamer);
+    let changed = false;
+    for (const record of records) {
+      const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+      if (!actor) continue;
+      const target = this.getProgression(record, actor, level).bonusHitDice;
+      const before = this.getAppliedHitDice(record);
+      if (target <= before) continue;
+      const applied = await this.applyCompanionHitDice(tamer, record, actor, target, level);
+      if (!applied) continue;
+      changed = true;
+      if (notify) ui.notifications.info(`${actor.name} received ${target - before} bonus Hit Die${target - before === 1 ? "" : "s"}.`);
+    }
+    if (changed) await this.save(tamer, records);
+    return changed;
+  }
+
   static getSoulBondFeature(tamer) {
     return tamer?.items?.find(item => String(item.name ?? '').trim().toLowerCase() === 'soul bond' || String(item.system?.identifier ?? '').trim().toLowerCase() === 'soul-bond') ?? null;
   }
@@ -712,7 +803,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     if(records.some(r=>r.actorUuid===actor.uuid))return ui.notifications.warn(`${actor.name} is already linked to this Tamer.`);
 
     const tree=await TamerCompanionManager.findBespokeTree(actor);
-    const record={id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0};
+    const record={id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0,hitDiceApplied:0,hitDiceChoices:{}};
 
     // Bespoke improvements with "become a tamer's companion" as their
     // prerequisite are granted automatically when the creature is tamed.
@@ -744,6 +835,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     records.push(record);
+    const targetHitDice = TamerCompanionManager.getProgression(record, actor, TamerCompanionManager.getTamerLevel(this.tamer)).bonusHitDice;
+    if (targetHitDice > 0) {
+      const applied = await TamerCompanionManager.applyCompanionHitDice(this.tamer, record, actor, targetHitDice, TamerCompanionManager.getTamerLevel(this.tamer));
+      if (!applied) ui.notifications.info(`${actor.name} was bonded successfully; its bonus Hit Die training remains pending.`);
+    }
     await TamerCompanionManager.save(this.tamer,records);
     ui.notifications.info(tree?`${actor.name} has been bonded with ${tree.name} improvements available.`:`${actor.name} has been bonded as a companion.`);
     await this.render({force:true}); return true;
@@ -1054,6 +1150,21 @@ Hooks.once("init", () => {
   const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
   Hooks.on("getHeaderControlsApplicationV2", addCompanionControl);
   Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
+  Hooks.on("dnd5e.advancementManagerComplete", async manager => {
+    const actor = manager?.actor;
+    if (!actor || !TamerCompanionManager.isTamer(actor)) return;
+    if (!(actor.isOwner || game.user.isGM)) return;
+    try {
+      if (await TamerCompanionManager.syncCompanionHitDice(actor)) {
+        for (const app of Object.values(ui.windows ?? {})) {
+          if (app instanceof TamerCompanionManager && app.tamer?.id === actor.id) await app.render({ force: true });
+        }
+      }
+    } catch (error) {
+      console.error("[Tamer Companion Manager] Companion Hit Die synchronization failed.", error);
+      ui.notifications.error("Companion Hit Dice could not be synchronized. See the console for details.");
+    }
+  });
   Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
     if (config?.type !== "short" || !TamerCompanionManager.isTamer(actor)) return;
     if (!(actor.isOwner || game.user.isGM)) return;
