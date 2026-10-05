@@ -1732,6 +1732,7 @@ Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "improvementTrees", { scope: "world", config: false, type: Array, default: [] });
   game.settings.register(MODULE_ID, "standardImprovementSources", { scope: "world", config: false, type: Array, default: [] });
   game.settings.register(MODULE_ID, "companionSourcePacks", { scope: "world", config: false, type: Array, default: [] });
+  game.settings.register(MODULE_ID, "splicerAugments", { scope: "world", config: false, type: Array, default: foundry.utils.deepClone(DEFAULT_SPLICER_AUGMENTS) });
   game.settings.registerMenu(MODULE_ID, "openImprovementRegistry", { name: "Bespoke Companion Improvements", label: "Register Improvements", hint: "Register additional improvement trees for bespoke companions.", icon: "fa-solid fa-tree", type: TamerCompanionImprovementRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openCompanionSources", { name: "Companion Sources", label: "Configure Companion Sources", hint: "Choose which Actor compendiums the Add Companion browser can use.", icon: "fa-solid fa-database", type: TamerCompanionSourceRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openSplicerAugments", { name: "Splicer Augments", label: "Configure Splicer Augments", hint: "Configure the Splicer augment registry, including costs and repeatability.", icon: "fa-solid fa-dna", type: TamerSplicerAugmentRegistry, restricted: true });
