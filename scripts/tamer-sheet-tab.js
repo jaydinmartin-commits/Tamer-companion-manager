@@ -76,9 +76,9 @@ class TamerCompanionSheetTab {
       });
     }
 
-    // When a normal ActorSheet tab is clicked, return control to the native
-    // sheet and restore any sections that were hidden while the companion tab
-    // was active.
+    // Deactivate our custom tab before the native sheet handles a normal
+    // tab click. Do not manipulate native tab bodies here; ApplicationV2 owns
+    // their visibility and will finish the transition itself.
     if (!nav.dataset.tcmNativeBound) {
       nav.dataset.tcmNativeBound = "true";
       nav.addEventListener("click", event => {
@@ -88,20 +88,11 @@ class TamerCompanionSheetTab {
         root.classList.remove("tcm-companions-active");
         content.classList.remove("active");
         content.hidden = true;
-        content.style.display = "none";
+        content.style.removeProperty("display");
+        content.style.removeProperty("pointer-events");
         tab.classList.remove("active");
         tab.setAttribute("aria-selected", "false");
-
-        // ApplicationV2 owns native tab switching. Restore only our state
-        // immediately, then let Foundry finish its own transition before
-        // releasing any stale hidden flags.
-        requestAnimationFrame(() => {
-          if (controller._tcmTabActive) return;
-          for (const section of body.querySelectorAll(".tab[data-tab]")) {
-            if (section !== content) section.hidden = false;
-          }
-        });
-      });
+      }, true);
     }
 
     if (!content.dataset.tcmBound) {
@@ -233,14 +224,18 @@ class TamerCompanionSheetTab {
       if (action === "summonCompanion") {
         const sheet = controller._tcmSheetApp;
         const sheetWasRendered = Boolean(sheet?.rendered);
-        if (sheetWasRendered) await sheet.close();
-        await TamerCompanionManager.summon(controller.tamer, record);
+        const summoned = await TamerCompanionManager.summon(controller.tamer, record);
+        if (summoned && sheetWasRendered) await sheet.close();
         return;
       }
 
       if (action === "dismissCompanion") {
-        await TamerCompanionManager.dismiss(controller.tamer, record);
-        return this.render(controller);
+        const sheet = controller._tcmSheetApp;
+        const sheetWasRendered = Boolean(sheet?.rendered);
+        const dismissed = await TamerCompanionManager.dismiss(controller.tamer, record);
+        if (dismissed && sheetWasRendered) await sheet.close();
+        else if (dismissed) return this.render(controller);
+        return;
       }
 
       if (action === "clearVessel") {
