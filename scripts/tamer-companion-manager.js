@@ -844,6 +844,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static _improvementSyncLocks = new Map();
+  // When a level-down removes higher-level improvements, Foundry may fire
+  // several advancement hooks for the same final level. Remember that this
+  // level was reached by rollback so duplicate hooks cannot reopen the picker.
+  static _improvementRollbackLocks = new Map();
 
   static async syncCompanionImprovements(tamer, {notify = true} = {}) {
     if (!tamer || !this.isTamer(tamer)) return false;
@@ -852,6 +856,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const operation = (async () => {
       const level = this.getTamerLevel(tamer);
+      const rollbackLockLevel = this._improvementRollbackLocks.get(lockKey);
+      if (rollbackLockLevel !== undefined && rollbackLockLevel !== level) {
+        this._improvementRollbackLocks.delete(lockKey);
+      }
       const records = this.records(tamer);
       let changed = false;
 
@@ -869,6 +877,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         // Leveling down: remove only improvements that were gained above the
         // new Tamer level. Legacy entries without assignedAtLevel are preserved.
         if (progressionEntries.length) {
+          // Set this before awaiting item deletions because additional Foundry
+          // advancement hooks can run after this operation completes.
+          this._improvementRollbackLocks.set(lockKey, level);
           for (const entry of progressionEntries.sort((a, b) =>
             Number(b.assignedAtLevel ?? 0) - Number(a.assignedAtLevel ?? 0)
           )) {
@@ -885,8 +896,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         const refreshed = this.getProgression(record, actor, level);
         // A level-down rollback can temporarily leave the companion below the
         // current target while the removed advancement is being reconciled.
-        // Never open the improvement picker as part of that rollback.
-        if (!progressionEntries.length && refreshed.pending > 0) {
+        // The rollback lock also covers duplicate hooks after the higher-level
+        // entries have already been removed.
+        const rollbackLocked = this._improvementRollbackLocks.get(lockKey) === level;
+        if (!rollbackLocked && refreshed.pending > 0) {
           const managed = await this.manageImprovements(tamer, record, actor);
           if (managed) changed = true;
         }
