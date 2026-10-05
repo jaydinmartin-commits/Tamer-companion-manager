@@ -1,35 +1,35 @@
 <form id="tcm-splicer-augment-registry" class="tcm-splicer-augment-registry">
   <header class="tcm-splicer-registry-header">
-    <p>Configure the Splicer augment definitions used by the Companion Manager. These defaults are based on the V1.9 Splicer augment list. Costs, repeat limits, level gates, and exclusive groups can be adjusted by the GM.</p>
+    <p>Link the Splicer augment Features/Items already created in your world. Drag an Item onto its row or enter its UUID. Costs and repeatability are configured here; the linked Item remains the source for the actual description and mechanics.</p>
   </header>
-
   <div class="tcm-splicer-registry-list">
     {{#each augments}}
-      <section class="tcm-splicer-registry-row" data-id="{{id}}">
+      <section class="tcm-splicer-registry-row" data-id="{{id}}" data-uuid="{{uuid}}">
         <div class="tcm-splicer-registry-row-head">
-          <strong>{{name}}</strong>
-          <span>{{id}}</span>
+          <img data-role="icon" src="{{img}}" alt="">
+          <div class="tcm-splicer-registry-title"><strong>{{name}}</strong><span>{{uuid}}</span></div>
+          <button type="button" data-action="remove" title="Remove augment"><i class="fa-solid fa-trash"></i></button>
         </div>
         <div class="tcm-splicer-registry-grid">
-          <label>Name<input name="name" type="text" value="{{name}}"></label>
+          <label>Feature UUID<input name="uuid" type="text" value="{{uuid}}" placeholder="Item...."></label>
           <label>Cost<input name="cost" type="number" min="0" step="1" value="{{cost}}"></label>
           <label>Max Applications<input name="maxCount" type="number" min="1" step="1" value="{{maxCount}}"></label>
           <label>2nd Application Level<input name="minLevelForSecond" type="number" min="0" step="1" value="{{minLevelForSecond}}"></label>
           <label>Exclusive Group<input name="exclusiveGroup" type="text" value="{{exclusiveGroup}}"></label>
         </div>
-        <label class="tcm-splicer-registry-description">Description<textarea name="description" rows="3">{{description}}</textarea></label>
-        <div class="tcm-splicer-registry-flags">
+        <div class="tcm-splicer-registry-actions">
           <label><input name="repeatable" type="checkbox" {{checked repeatable}}> Repeatable</label>
           <label><input name="growth" type="checkbox" {{checked growth}}> Growth augment</label>
+          <button type="button" data-action="clearLink">Clear Link</button>
         </div>
+        <details><summary>Linked Feature Description</summary><div class="tcm-splicer-linked-description">{{{description}}}</div></details>
       </section>
     {{/each}}
   </div>
-
   <footer class="form-footer">
-    <button type="button" data-action="reset"><i class="fa-solid fa-rotate-left"></i> Reset V1.9 Defaults</button>
+    <button type="button" data-action="addRow"><i class="fa-solid fa-plus"></i> Add Augment</button>
     <span class="flex-spacer"></span>
     <button type="button" data-action="cancel">Cancel</button>
-    <button type="button" data-action="save"><i class="fa-solid fa-save"></i> Save</button>
+    <button type="button" data-action="save"><i class="fa-solid fa-save"></i> Save Registry</button>
   </footer>
 </form>
