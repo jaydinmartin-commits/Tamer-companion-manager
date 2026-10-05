@@ -1627,46 +1627,115 @@ class TamerSplicerAugmentRegistry extends HandlebarsApplicationMixin(Application
     id: "tcm-splicer-augments",
     classes: ["tcm-splicer-augments"],
     window: { title: "Splicer Augments", icon: "fa-solid fa-dna", resizable: true },
-    position: { width: 860, height: 720 },
-    actions: { save: this._onSave, reset: this._onReset, cancel: this._onCancel }
+    position: { width: 900, height: 720 },
+    actions: {
+      save: this._onSave,
+      cancel: this._onCancel,
+      remove: this._onRemove,
+      clearLink: this._onClearLink
+    }
   };
-  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/splicer-augment-registry.hbs`, root: true } };
+
+  static PARTS = {
+    main: {
+      template: `modules/${MODULE_ID}/templates/splicer-augment-registry.hbs`,
+      root: true
+    }
+  };
 
   async _prepareContext() {
-    const augments = TamerCompanionManager.getSplicerAugmentRegistry();
-    return { augments };
+    return {
+      augments: TamerCompanionManager.getSplicerAugmentRegistry()
+    };
+  }
+
+  static _extractItemUuid(data) {
+    if (!data) return "";
+    const direct = data.uuid ?? data.documentUuid ?? data.uuidString;
+    if (typeof direct === "string" && direct.startsWith("Item.")) return direct;
+    const nested = data.data?.uuid ?? data.document?.uuid;
+    if (typeof nested === "string" && nested.startsWith("Item.")) return nested;
+    return "";
+  }
+
+  static async _resolveItem(uuid) {
+    if (!uuid) return null;
+    try {
+      return await fromUuid(uuid);
+    } catch (error) {
+      console.warn("[Tamer Companion Manager] Could not resolve Splicer augment Item UUID.", uuid, error);
+      return null;
+    }
+  }
+
+  static async _onDrop(event) {
+    event.preventDefault();
+    const uuid = this._extractItemUuid(foundry.applications.ux.TextEditor.getDragEventData?.(event));
+    if (!uuid) return ui.notifications.warn("Drop an existing Foundry Item/Feature.");
+    const item = await this._resolveItem(uuid);
+    if (!item || item.type === "class") return ui.notifications.warn("That drop does not reference a usable Item Feature.");
+    const row = event.target.closest(".tcm-splicer-registry-row");
+    if (!row) return;
+    row.dataset.uuid = item.uuid;
+    const uuidInput = row.querySelector("[name='uuid']");
+    const nameInput = row.querySelector("[name='name']");
+    if (uuidInput) uuidInput.value = item.uuid;
+    if (nameInput) nameInput.value = item.name;
+    const icon = row.querySelector("[data-role='icon']");
+    if (icon) icon.src = item.img;
+  }
+
+  async _onRender(context, options) {
+    await super._onRender?.(context, options);
+    const root = this.element;
+    if (!root) return;
+    root.ondragover = event => {
+      if (event.target.closest(".tcm-splicer-registry-row")) event.preventDefault();
+    };
+    root.ondrop = event => TamerSplicerAugmentRegistry._onDrop(event);
   }
 
   static async _onSave() {
     const rows = [...document.querySelectorAll("#tcm-splicer-augment-registry .tcm-splicer-registry-row")];
-    const augments = rows.map(row => ({
-      id: String(row.dataset.id ?? "").trim(),
-      name: String(row.querySelector("[name='name']")?.value ?? "").trim(),
-      description: String(row.querySelector("[name='description']")?.value ?? "").trim(),
-      cost: Math.max(0, Math.floor(Number(row.querySelector("[name='cost']")?.value ?? 0))),
-      repeatable: Boolean(row.querySelector("[name='repeatable']")?.checked),
-      maxCount: Math.max(1, Math.floor(Number(row.querySelector("[name='maxCount']")?.value ?? 1))),
-      minLevelForSecond: Math.max(0, Math.floor(Number(row.querySelector("[name='minLevelForSecond']")?.value ?? 0))) || null,
-      exclusiveGroup: String(row.querySelector("[name='exclusiveGroup']")?.value ?? "").trim() || null,
-      growth: Boolean(row.querySelector("[name='growth']")?.checked)
-    })).filter(augment => augment.id && augment.name);
-
-    const ids = new Set();
-    for (const augment of augments) {
-      if (ids.has(augment.id)) return ui.notifications.warn(`Duplicate augment ID: ${augment.id}`);
-      ids.add(augment.id);
+    const augments = [];
+    for (const row of rows) {
+      const uuid = String(row.querySelector("[name='uuid']")?.value ?? row.dataset.uuid ?? "").trim();
+      const item = uuid ? await this._resolveItem(uuid) : null;
+      if (!item) {
+        if (uuid) ui.notifications.warn(`Could not resolve Splicer augment Item UUID: ${uuid}`);
+        continue;
+      }
+      augments.push({
+        id: String(row.dataset.id ?? foundry.utils.randomID()),
+        uuid: item.uuid,
+        name: item.name,
+        description: item.system?.description?.value ?? item.description ?? "",
+        img: item.img,
+        cost: Math.max(0, Math.floor(Number(row.querySelector("[name='cost']")?.value ?? 0))),
+        repeatable: Boolean(row.querySelector("[name='repeatable']")?.checked),
+        maxCount: Math.max(1, Math.floor(Number(row.querySelector("[name='maxCount']")?.value ?? 1))),
+        minLevelForSecond: Math.max(0, Math.floor(Number(row.querySelector("[name='minLevelForSecond']")?.value ?? 0))) || null,
+        exclusiveGroup: String(row.querySelector("[name='exclusiveGroup']")?.value ?? "").trim() || null,
+        growth: Boolean(row.querySelector("[name='growth']")?.checked)
+      });
     }
-
     await game.settings.set(MODULE_ID, "splicerAugments", augments);
-    ui.notifications.info(`Splicer augment registry saved. ${augments.length} augment definitions configured.`);
+    ui.notifications.info(`Splicer augment registry saved. ${augments.length} linked augment${augments.length === 1 ? "" : "s"} configured.`);
+    await this.close();
   }
 
-  static async _onReset() {
-    await game.settings.set(MODULE_ID, "splicerAugments", foundry.utils.deepClone(DEFAULT_SPLICER_AUGMENTS));
-    ui.notifications.info("Splicer augment registry reset to the V1.9 defaults.");
-    for (const app of Object.values(ui.windows ?? {})) {
-      if (app instanceof TamerSplicerAugmentRegistry) await app.render({ force: true });
-    }
+  static async _onRemove(event, target) {
+    target?.closest(".tcm-splicer-registry-row")?.remove();
+  }
+
+  static async _onClearLink(event, target) {
+    const row = target?.closest(".tcm-splicer-registry-row");
+    if (!row) return;
+    row.dataset.uuid = "";
+    const uuidInput = row.querySelector("[name='uuid']");
+    if (uuidInput) uuidInput.value = "";
+    const icon = row.querySelector("[data-role='icon']");
+    if (icon) icon.src = "icons/svg/item-bag.svg";
   }
 
   static async _onCancel() { await this.close(); }
