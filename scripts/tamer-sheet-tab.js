@@ -15,9 +15,14 @@ class TamerCompanionSheetTab {
   }
 
   static findBody(root) {
-    return root.querySelector(".sheet-body")
-      ?? root.querySelector(".sheet-content")
-      ?? root.querySelector(".window-content");
+    // dnd5e v6 ApplicationV2 uses a dedicated container for all native tab
+    // bodies. Keep the embedded Companion Manager inside that container so
+    // the native header, ability scores, and collapsible portrait/sidebar
+    // remain outside of it and continue to control the sheet layout.
+    return root.querySelector('[data-container-id="tabs"]')
+      ?? root.querySelector(".tab-body")
+      ?? root.querySelector(".sheet-body")
+      ?? root.querySelector(".sheet-content");
   }
 
   static async attach(app, element) {
