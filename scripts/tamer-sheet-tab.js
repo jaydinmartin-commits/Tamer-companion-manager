@@ -83,16 +83,23 @@ class TamerCompanionSheetTab {
       nav.dataset.tcmNativeBound = "true";
       nav.addEventListener("click", event => {
         const nativeTab = event.target?.closest?.("[data-tab]");
-        if (!nativeTab) return;
+        if (!nativeTab || nativeTab === tab) return;
         controller._tcmTabActive = false;
         content.classList.remove("active");
         content.hidden = true;
         content.style.display = "none";
-        for (const section of body.querySelectorAll(".tab[data-tab]")) {
-          section.hidden = false;
-        }
         tab.classList.remove("active");
         tab.setAttribute("aria-selected", "false");
+
+        // ApplicationV2 owns native tab switching. Restore only our state
+        // immediately, then let Foundry finish its own transition before
+        // releasing any stale hidden flags.
+        requestAnimationFrame(() => {
+          if (controller._tcmTabActive) return;
+          for (const section of body.querySelectorAll(".tab[data-tab]")) {
+            if (section !== content) section.hidden = false;
+          }
+        });
       });
     }
 
@@ -175,6 +182,8 @@ class TamerCompanionSheetTab {
     for (const section of body.querySelectorAll(".tab[data-tab]")) {
       section.classList.remove("active");
       section.hidden = true;
+      section.style.removeProperty("display");
+      section.style.removeProperty("pointer-events");
     }
 
     tab.classList.add("active");
