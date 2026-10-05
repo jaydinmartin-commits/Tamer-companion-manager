@@ -1807,9 +1807,6 @@ Hooks.once("init", () => {
   game.settings.registerMenu(MODULE_ID, "openSplicerAugments", { name: "Splicer Augments", label: "Configure Splicer Augments", hint: "Configure the Splicer augment registry, including costs and repeatability.", icon: "fa-solid fa-dna", type: TamerSplicerAugmentRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openManager", { name: "Tamer Companion Manager", label: "Open Companion Manager", hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.", icon: "fa-solid fa-paw", type: TamerCompanionManager, restricted: false });
   game.tamerCompanionManager = { open: actor => TamerCompanionManager.open(actor), isTamer: actor => TamerCompanionManager.isTamer(actor), getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor), getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level) };
-  const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
-  Hooks.on("getHeaderControlsApplicationV2", addCompanionControl);
-  Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
   TamerCompanionManager._pendingLevelTransitions = new Map();
 
   const captureLevelTransition = (actor, oldLevel, newLevel) => {
