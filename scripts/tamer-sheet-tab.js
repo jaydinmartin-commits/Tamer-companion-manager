@@ -98,6 +98,34 @@ class TamerCompanionSheetTab {
       content.dataset.tcmBound = "true";
       content.addEventListener("click", event => { void this.action(event, controller); }, true);
       content.addEventListener("change", event => { void this.change(event, controller); }, true);
+
+      // dnd5e's native Actor drop handler also listens on the character sheet.
+      // When the Companion tab is active, an Actor dropped onto an empty
+      // companion slot must be consumed here first; otherwise the native
+      // sheet interprets the Actor drop as a Polymorph operation.
+      content.addEventListener("dragover", event => {
+        if (!controller._tcmTabActive) return;
+        const zone = event.target?.closest?.(".tcm-drop-zone");
+        if (!zone || !content.contains(zone)) return;
+        const data = foundry.applications.ux.TextEditor?.getDragEventData?.(event)
+          ?? TextEditor?.getDragEventData?.(event);
+        if (data?.type !== "Actor") return;
+        event.preventDefault();
+        event.stopPropagation();
+      }, true);
+
+      content.addEventListener("drop", event => {
+        if (!controller._tcmTabActive) return;
+        const zone = event.target?.closest?.(".tcm-drop-zone");
+        if (!zone || !content.contains(zone)) return;
+        const data = foundry.applications.ux.TextEditor?.getDragEventData?.(event)
+          ?? TextEditor?.getDragEventData?.(event);
+        if (data?.type !== "Actor") return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void controller._onDropCompanion(event);
+      }, true);
     }
 
     controller.tamer = actor;
