@@ -531,3 +531,5 @@
 @media (max-width: 760px) {
   .tcm-splicer-registry-grid { grid-template-columns:1fr 1fr; }
 }
+
+.tcm-splicer-registry-row-head{display:flex;align-items:center;gap:10px}.tcm-splicer-registry-row-head img{width:40px;height:40px;object-fit:contain}.tcm-splicer-registry-title{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}.tcm-splicer-registry-title span{font-size:.75em;opacity:.65;overflow:hidden;text-overflow:ellipsis}.tcm-splicer-registry-actions{display:flex;align-items:center;gap:16px;margin-top:8px}.tcm-splicer-linked-description{padding:8px;border:1px solid var(--color-border-light-2);border-radius:4px;margin-top:6px;max-height:180px;overflow:auto}.tcm-splicer-registry-actions button{margin-left:auto}
