@@ -695,3 +695,136 @@
 .tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-rule-note {
   display: none !important;
 }
+
+
+/* v0.1.87 embedded sheet layout polish */
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] {
+  padding-top: 42px;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-root.tcm-embedded {
+  box-sizing: border-box;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-header {
+  padding: 4px 0 6px;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-toolbar {
+  padding: 5px 0 8px;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-companion-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 310px;
+  align-content: start;
+  align-items: stretch;
+  gap: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 2px 14px;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-card,
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-slot,
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-state {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 310px;
+  box-sizing: border-box;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-card {
+  position: relative;
+  flex: none;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-slot {
+  margin: 0;
+  padding: 18px;
+  gap: 7px;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-slot strong {
+  font-size: .95rem;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-slot small {
+  max-width: 210px;
+  line-height: 1.35;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-state {
+  grid-column: auto;
+  margin: 0;
+  padding: 18px;
+  gap: 7px;
+  opacity: .65;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-state h3 {
+  font-size: 1rem;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-state p {
+  max-width: 240px;
+  line-height: 1.4;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-card-body {
+  min-height: 0;
+  padding: 10px;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-card-heading {
+  padding-right: 26px;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-vessel-clear {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 5;
+  width: 25px;
+  height: 25px;
+  min-height: 25px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--tcm-border-soft, rgba(128,128,128,.4));
+  border-radius: 50%;
+  background: rgba(0,0,0,.62);
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  font-size: .72rem;
+  line-height: 1;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-vessel-clear i {
+  margin: 0;
+  pointer-events: none;
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-vessel-clear:hover {
+  border-color: var(--tcm-accent, var(--color-border-highlight, #d9a441));
+  background: rgba(0,0,0,.8);
+}
+
+.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-actions {
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) 34px;
+}
+
+@media (max-width: 650px) {
+  .tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-companion-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: 310px;
+  }
+}
+
+@media (max-width: 500px) {
+  .tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] {
+    padding-top: 32px;
+  }
+}
