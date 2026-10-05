@@ -920,7 +920,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static getCompanionHitDieFormula(actor) {
     const formula = String(actor?.system?.attributes?.hp?.formula ?? "").trim();
-    const match = formula.match(/^(\d+)d(4|6|8|10|12)$/i);
+    const match = formula.match(/^(\d+)d(4|6|8|10|12)(?:\s*[+-]\s*\d+)?$/i) || formula.match(/^(\d+)d(4|6|8|10|12)/i);
     if (!match) return { count: 1, denomination: this.getCompanionHitDie(actor) };
     return { count: Math.max(0, Number(match[1])), denomination: Number(match[2]) };
   }
@@ -987,7 +987,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
       const formula = this.getCompanionHitDieFormula(actor);
       if (record.hitDiceBaseCount === undefined) {
-        record.hitDiceBaseCount = formula.count;
+        // Older records may already have had Tamer Hit Dice applied before
+        // native synchronization existed. Recover the original companion
+        // count by subtracting the recorded Tamer-applied dice.
+        const previouslyApplied = this.getAppliedHitDice(record);
+        record.hitDiceBaseCount = Math.max(1, formula.count - previouslyApplied);
         record.hitDiceBaseDenomination = formula.denomination;
         changed = true;
       }
