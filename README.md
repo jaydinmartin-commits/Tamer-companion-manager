@@ -101,3 +101,8 @@ Progression hardening release: corrected ASI-level Hit Die tracking, improved pr
 
 ## v0.1.65
 - Prevent duplicate advancement hooks from reopening Choose Improvement after a level-down rollback.
+
+
+## v0.1.66
+- Make automatic improvement selection depend on an authoritative pre-update level transition.
+- Prevent internal improvement Advancement Managers from re-entering the global companion advancement synchronizer.
