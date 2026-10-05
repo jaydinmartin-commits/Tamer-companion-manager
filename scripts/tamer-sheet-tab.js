@@ -107,8 +107,7 @@ class TamerCompanionSheetTab {
         if (!controller._tcmTabActive) return;
         const zone = event.target?.closest?.(".tcm-drop-zone");
         if (!zone || !content.contains(zone)) return;
-        const data = foundry.applications.ux.TextEditor?.getDragEventData?.(event)
-          ?? TextEditor?.getDragEventData?.(event);
+        const data = globalThis.TextEditor?.getDragEventData?.(event);
         if (data?.type !== "Actor") return;
         event.preventDefault();
         event.stopPropagation();
