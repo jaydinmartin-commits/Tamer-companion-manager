@@ -978,10 +978,7 @@ class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(Applicatio
     }
 
     ui.notifications.info(`Companion sources updated. ${stored.length} Actor compendium${stored.length === 1 ? "" : "s"} enabled.`);
-    if (target?.closest) {
-      const appElement = target.closest(".application, .window-app");
-      if (appElement?.close) await appElement.close();
-    }
+    await this.close();
   }
 
   static async _onCancel() { await this.close(); }
