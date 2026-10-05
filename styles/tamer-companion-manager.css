@@ -514,3 +514,20 @@
   #tamer-companion-manager .tcm-card-image{flex-basis:24%!important;width:24%!important}
   #tamer-companion-manager .tcm-card-body{max-width:76%!important}
 }
+
+
+.tcm-splicer-augment-registry { display:flex; flex-direction:column; gap:10px; height:100%; overflow:hidden; }
+.tcm-splicer-registry-header { flex:0 0 auto; }
+.tcm-splicer-registry-list { flex:1 1 auto; overflow-y:auto; padding-right:6px; }
+.tcm-splicer-registry-row { border:1px solid var(--color-border-light-2); border-radius:6px; padding:10px; margin-bottom:8px; }
+.tcm-splicer-registry-row-head { display:flex; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.tcm-splicer-registry-row-head span { opacity:.65; font-size:.8em; }
+.tcm-splicer-registry-grid { display:grid; grid-template-columns:2fr .7fr 1fr 1fr 1.4fr; gap:8px; }
+.tcm-splicer-registry-grid label, .tcm-splicer-registry-description { display:flex; flex-direction:column; gap:3px; }
+.tcm-splicer-registry-description textarea { resize:vertical; }
+.tcm-splicer-registry-flags { display:flex; gap:16px; margin-top:8px; }
+.tcm-splicer-augment-registry .form-footer { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+.tcm-splicer-augment-registry .flex-spacer { flex:1; }
+@media (max-width: 760px) {
+  .tcm-splicer-registry-grid { grid-template-columns:1fr 1fr; }
+}
