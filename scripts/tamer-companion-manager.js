@@ -66,6 +66,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const level = TamerCompanionManager.getTamerLevel(this.tamer), slots = TamerCompanionManager.getPocketFamilySlots(level), records = TamerCompanionManager.records(this.tamer);
+    const assignedVessels = new Set(records.map(r => r?.vesselUuid).filter(Boolean));
+    const vesselPool = (this.tamer.items?.contents ?? [...(this.tamer.items ?? [])])
+      .filter(item => item?.documentName === "Item" && item.type !== "class")
+      .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
     // Reconcile stale summoned-token references before rendering state.
     let stateChanged = false;
     for (const record of records) {
@@ -74,7 +78,17 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!token) { record.tokenUuid = null; record.status = "in-vessel"; stateChanged = true; }
     }
     // Vessel records are also reconciled here so deleted/transferred Items do not leave dead associations.\n    for (const record of records) {\n      if (!record?.vesselUuid) continue;\n      const vessel = await TamerCompanionManager.getVessel(record, this.tamer);\n      if (!vessel) {\n        record.vesselUuid = null;\n        record.vesselName = "";\n        stateChanged = true;\n      }\n    }\n    if (stateChanged) await TamerCompanionManager.save(this.tamer, records);
-    const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; const vessel = await TamerCompanionManager.getVessel(record, this.tamer); return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: vessel?.name ?? record.vesselName ?? "No vessel assigned", vesselImg: vessel?.img ?? "icons/svg/item-bag.svg", vesselEquipped: Boolean(vessel?.system?.equipped), linked: Boolean(actor), summoned: Boolean(token), progression }; }));
+    const companions = await Promise.all(records.map(async (record, index) => {
+      const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+      const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null;
+      const currentActor = token?.actor ?? actor;
+      const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 };
+      const vessel = await TamerCompanionManager.getVessel(record, this.tamer);
+      const vessels = vesselPool
+        .filter(item => item.uuid === record.vesselUuid || !assignedVessels.has(item.uuid))
+        .map(item => ({ uuid: item.uuid, name: item.name, equipped: item.system?.equipped === true, selected: item.uuid === record.vesselUuid }));
+      return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: vessel?.name ?? record.vesselName ?? "No vessel assigned", vesselImg: vessel?.img ?? "icons/svg/item-bag.svg", vesselEquipped: Boolean(vessel?.system?.equipped), linked: Boolean(actor), summoned: Boolean(token), progression, vessels };
+    }));
     const soulBondFeature = TamerCompanionManager.getSoulBondFeature(this.tamer);
     const soulBond = soulBondFeature ? { current: Number(soulBondFeature.system?.uses?.value ?? 0), max: Number(soulBondFeature.system?.uses?.max ?? 0) } : { current: 0, max: 0 };
     return { tamer: { name: this.tamer.name, img: this.tamer.img, level }, pocketFamily: { slots, occupied: companions.length, empty: Array.from({ length: Math.max(0, slots - companions.length) }, (_, i) => i) }, limits: { size: TamerCompanionManager.getMaxCompanionSize(level), cr: TamerCompanionManager.getMaxCompanionCR(level) }, soulBond, companions };
@@ -1807,9 +1821,6 @@ Hooks.once("init", () => {
   game.settings.registerMenu(MODULE_ID, "openSplicerAugments", { name: "Splicer Augments", label: "Configure Splicer Augments", hint: "Configure the Splicer augment registry, including costs and repeatability.", icon: "fa-solid fa-dna", type: TamerSplicerAugmentRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openManager", { name: "Tamer Companion Manager", label: "Open Companion Manager", hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.", icon: "fa-solid fa-paw", type: TamerCompanionManager, restricted: false });
   game.tamerCompanionManager = { open: actor => TamerCompanionManager.open(actor), isTamer: actor => TamerCompanionManager.isTamer(actor), getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor), getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level) };
-  const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
-  Hooks.on("getHeaderControlsApplicationV2", addCompanionControl);
-  Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
   TamerCompanionManager._pendingLevelTransitions = new Map();
 
   const captureLevelTransition = (actor, oldLevel, newLevel) => {
