@@ -30,11 +30,11 @@ class TamerCompanionSheetTab {
     const body = this.findBody(root);
     if (!nav || !body) return;
 
-    let tab = nav.querySelector(`[data-tab="${TAB_ID}"]`);
+    let tab = nav.querySelector(`[data-tcm-tab="${TAB_ID}"]`);
     if (!tab) {
       tab = document.createElement("button");
       tab.className = "item tcm-sheet-tab";
-      tab.dataset.tab = TAB_ID;
+      tab.dataset.tcmTab = TAB_ID;
       tab.type = "button";
       tab.innerHTML = '<i class="fa-solid fa-paw" aria-hidden="true"></i>';
       tab.title = "Companions";
@@ -42,11 +42,11 @@ class TamerCompanionSheetTab {
       nav.appendChild(tab);
     }
 
-    let content = body.querySelector(`.tcm-sheet-tab-content[data-tab="${TAB_ID}"]`);
+    let content = body.querySelector(`.tcm-sheet-tab-content[data-tcm-tab="${TAB_ID}"]`);
     if (!content) {
       content = document.createElement("div");
       content.className = "tab tcm-sheet-tab-content";
-      content.dataset.tab = TAB_ID;
+      content.dataset.tcmTab = TAB_ID;
       body.appendChild(content);
     }
 
@@ -56,17 +56,37 @@ class TamerCompanionSheetTab {
       this.controllers.set(app, controller);
     }
 
-    // Actor sheets can rebuild their DOM when an item is equipped/unequipped.
-    // Re-bind the embedded tab and content listeners to the NEW DOM nodes.
-    // Without this, the paw tab can lose its handler and fall through to the
-    // sheet's native tab/window handling.
+    // The companion tab is intentionally NOT a native ActorSheetV2 tab.
+    // Using data-tab here makes Foundry's ApplicationV2 tab handler treat our
+    // injected button as part of the sheet's own tab configuration.
     if (!tab.dataset.tcmBound) {
       tab.dataset.tcmBound = "true";
       tab.addEventListener("click", event => {
         event.preventDefault();
-        event.stopImmediatePropagation();
+        event.stopPropagation();
+        controller._tcmTabActive = true;
         void this.activate(root, nav, body, tab, content, controller);
-      }, true);
+      });
+    }
+
+    // When a normal ActorSheet tab is clicked, return control to the native
+    // sheet and restore any sections that were hidden while the companion tab
+    // was active.
+    if (!nav.dataset.tcmNativeBound) {
+      nav.dataset.tcmNativeBound = "true";
+      nav.addEventListener("click", event => {
+        const nativeTab = event.target?.closest?.("[data-tab]");
+        if (!nativeTab) return;
+        controller._tcmTabActive = false;
+        content.classList.remove("active");
+        content.hidden = true;
+        content.style.display = "none";
+        for (const section of body.querySelectorAll(".tab[data-tab]")) {
+          section.hidden = false;
+        }
+        tab.classList.remove("active");
+        tab.setAttribute("aria-selected", "false");
+      });
     }
 
     if (!content.dataset.tcmBound) {
@@ -79,7 +99,7 @@ class TamerCompanionSheetTab {
     controller._tcmSheetContent = content;
     await this.render(controller);
 
-    if (tab.classList.contains("active")) {
+    if (controller._tcmTabActive) {
       await this.activate(root, nav, body, tab, content, controller);
     }
   }
@@ -118,12 +138,12 @@ class TamerCompanionSheetTab {
     }
 
     for (const section of body.querySelectorAll(".tab[data-tab]")) {
-      if (section === content) continue;
       section.classList.remove("active");
       section.hidden = true;
     }
 
     tab.classList.add("active");
+    tab.setAttribute("aria-selected", "true");
     content.hidden = false;
     content.classList.add("active");
     content.style.display = "flex";
@@ -176,7 +196,7 @@ class TamerCompanionSheetTab {
 
       if (action === "clearVessel") {
         await TamerCompanionManager.clearVessel(controller.tamer, record);
-        return this.render(controller);
+        return;
       }
 
       if (action === "trainCompanion") {
@@ -220,7 +240,7 @@ class TamerCompanionSheetTab {
     const uuid = String(select.value ?? "");
     if (!uuid) {
       await TamerCompanionManager.clearVessel(controller.tamer, record);
-      return this.render(controller);
+      return;
     }
 
     const item = await fromUuid(uuid).catch(() => null);
@@ -230,13 +250,11 @@ class TamerCompanionSheetTab {
     }
 
     await TamerCompanionManager.setVessel(controller.tamer, record, item);
-    await this.render(controller);
   }
 }
 
 Hooks.once("init", () => {
   Hooks.on("renderActorSheetV2", (app, element) => TamerCompanionSheetTab.attach(app, element));
-  Hooks.on("renderActorSheet", (app, html) => TamerCompanionSheetTab.attach(app, html));
 });
 
 globalThis.TamerCompanionSheetTab = TamerCompanionSheetTab;
