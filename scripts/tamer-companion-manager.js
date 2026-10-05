@@ -883,7 +883,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         // progression, open the existing picker so the player can fill the
         // missing advancement slots with either standard or bespoke choices.
         const refreshed = this.getProgression(record, actor, level);
-        if (refreshed.pending > 0) {
+        // A level-down rollback can temporarily leave the companion below the
+        // current target while the removed advancement is being reconciled.
+        // Never open the improvement picker as part of that rollback.
+        if (!progressionEntries.length && refreshed.pending > 0) {
           const managed = await this.manageImprovements(tamer, record, actor);
           if (managed) changed = true;
         }
@@ -1406,8 +1409,10 @@ Hooks.once("init", () => {
     if (!actor || !TamerCompanionManager.isTamer(actor)) return;
     if (!(actor.isOwner || game.user.isGM)) return;
     try {
-      await TamerCompanionManager.syncCompanionImprovements(actor);
+      // Resolve companion Hit Dice first so the HP choice is completed
+      // before the improvement picker is presented on a level-up.
       await TamerCompanionManager.syncCompanionHitDice(actor);
+      await TamerCompanionManager.syncCompanionImprovements(actor);
       for (const app of Object.values(ui.windows ?? {})) {
         if (app instanceof TamerCompanionManager && app.tamer?.id === actor.id) {
           await app.render({ force: true });
