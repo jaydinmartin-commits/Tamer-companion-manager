@@ -23,7 +23,7 @@
         <div class="tcm-splicer-augment-info">
           <h3>{{name}}</h3>
           <div class="tcm-splicer-augment-description">{{{description}}}</div>
-          <small>{{cost}} point{{#unless (eq cost 1)}}s{{/unless}}{{#if repeatable}} • Repeatable (max {{maxCount}}){{/if}}{{#if minLevelForSecond}} • Second at level {{minLevelForSecond}}{{/if}}</small>
+          <small>{{cost}} point(s){{#if repeatable}} • Repeatable (max {{maxCount}}){{/if}}{{#if minLevelForSecond}} • Second at level {{minLevelForSecond}}{{/if}}</small>
         </div>
         <div class="tcm-splicer-counter">
           <button type="button" data-action="decrement" data-id="{{id}}" {{#unless count}}disabled{{/unless}} aria-label="Remove {{name}}"><i class="fa-solid fa-minus"></i></button>
