@@ -1,6 +1,38 @@
 const MODULE_ID = "tamer-companion-manager";
 const FLAG_KEY = "companions";
 
+const DEFAULT_SPLICER_AUGMENTS = [
+  {id:"water-breathing",name:"Water Breathing",description:"The companion can breathe only water.",cost:0,repeatable:false,maxCount:1},
+  {id:"amphibious",name:"Amphibious",description:"The companion can breathe both air and water.",cost:1,repeatable:false,maxCount:1},
+  {id:"darkvision",name:"Darkvision",description:"The companion gains darkvision to 60 feet. If it already has darkvision, increase its range by 60 feet, to a maximum of 120 feet.",cost:1,repeatable:true,maxCount:2},
+  {id:"extra-limb",name:"Extra Limb",description:"The companion gains one additional limb, allowing it to grapple one additional target. This augment can be taken up to four times.",cost:1,repeatable:true,maxCount:4},
+  {id:"fins-webbing",name:"Fins & Webbing",description:"The companion gains a swimming speed of 30 feet, or its existing slower swimming speed becomes 30 feet.",cost:1,repeatable:false,maxCount:1},
+  {id:"illumination",name:"Illumination",description:"The companion sheds bright light in a 10-foot radius and dim light for an additional 10 feet.",cost:1,repeatable:false,maxCount:1},
+  {id:"keen-hearing",name:"Keen Hearing",description:"The companion has advantage on Wisdom (Perception) checks that rely on hearing.",cost:1,repeatable:false,maxCount:1},
+  {id:"keen-sight",name:"Keen Sight",description:"The companion has advantage on Wisdom (Perception) checks that rely on sight.",cost:1,repeatable:false,maxCount:1},
+  {id:"keen-smell",name:"Keen Smell",description:"The companion has advantage on Wisdom (Perception) checks that rely on smell.",cost:1,repeatable:false,maxCount:1},
+  {id:"powerful-build",name:"Powerful Build",description:"The companion counts as one size larger when determining carrying capacity and the amount it can push, drag, or lift.",cost:1,repeatable:false,maxCount:1},
+  {id:"prehensile-tail",name:"Prehensile Tail",description:"The companion gains a climbing speed of 30 feet, or its existing slower climbing speed becomes 30 feet.",cost:1,repeatable:false,maxCount:1},
+  {id:"slippery",name:"Slippery",description:"The companion has advantage on ability checks and saving throws made to escape a grapple.",cost:1,repeatable:false,maxCount:1},
+  {id:"sure-footed",name:"Sure-Footed",description:"The companion has advantage on Strength and Dexterity saving throws against being knocked prone.",cost:1,repeatable:false,maxCount:1},
+  {id:"web-sense-web-walk",name:"Web Sense + Web Walk",description:"The companion knows the exact location of creatures touching the same web and ignores movement restrictions caused by webbing.",cost:1,repeatable:false,maxCount:1},
+  {id:"burrowing-claws",name:"Burrowing Claws",description:"The companion gains a burrowing speed of 15 feet and leaves no opening behind, or its existing slower burrowing speed becomes 15 feet.",cost:2,repeatable:false,maxCount:1},
+  {id:"long-limbed",name:"Long Limbed",description:"The companion's melee attack reach increases by 5 feet.",cost:2,repeatable:false,maxCount:1},
+  {id:"mimicry",name:"Mimicry",description:"The companion can mimic simple sounds. A creature can identify the imitation with a successful DC 8 + proficiency bonus Wisdom (Insight) check.",cost:2,repeatable:false,maxCount:1},
+  {id:"natural-armour",name:"Natural Armour",description:"The companion gains a +1 bonus to AC. This augment can be taken up to three times, increasing the bonus by 1 each time.",cost:2,repeatable:true,maxCount:3},
+  {id:"poisonous-touch",name:"Poisonous Touch",description:"The first time each turn the companion hits with a weapon, the attack deals an extra 1d4 poison damage. A second application is available at 9th level and increases the extra damage to 2d4.",cost:2,repeatable:true,maxCount:2,minLevelForSecond:9,exclusiveGroup:"elemental-touch"},
+  {id:"spider-climb",name:"Spider Climb",description:"The companion can climb difficult surfaces, including upside down on ceilings, without needing to make an ability check.",cost:2,repeatable:false,maxCount:1},
+  {id:"camouflage",name:"Camouflage",description:"The companion has advantage on Dexterity (Stealth) checks while it is not moving.",cost:3,repeatable:false,maxCount:1},
+  {id:"corrosive-touch",name:"Corrosive Touch",description:"The first time each turn the companion hits with a weapon, the attack deals an extra 1d6 acid damage. A second application is available at 13th level and increases the extra damage to 2d6.",cost:3,repeatable:true,maxCount:2,minLevelForSecond:13,exclusiveGroup:"elemental-touch"},
+  {id:"tremorsense",name:"Tremorsense",description:"The companion gains tremorsense to 15 feet. A second application increases the range by another 15 feet, to a maximum of 30 feet.",cost:3,repeatable:true,maxCount:2},
+  {id:"wings",name:"Wings",description:"The companion gains a flying speed of 30 feet, or its existing slower flying speed becomes 30 feet.",cost:3,repeatable:false,maxCount:1},
+  {id:"blindsight-echolocation",name:"Blindsight + Echolocation",description:"The companion gains blindsight to 15 feet. A second application increases the range by another 15 feet, to a maximum of 30 feet. The companion cannot use this blindsight while deafened.",cost:4,repeatable:true,maxCount:2},
+  {id:"decaying-touch",name:"Decaying Touch",description:"The first time each turn the companion hits with a weapon, the attack deals an extra 1d8 necrotic damage. A second application is available at 17th level and increases the extra damage to 2d8.",cost:4,repeatable:true,maxCount:2,minLevelForSecond:17,exclusiveGroup:"elemental-touch"},
+  {id:"flyby",name:"Flyby",description:"The companion does not provoke opportunity attacks when it flies out of an enemy's reach.",cost:4,repeatable:false,maxCount:1},
+  {id:"growth-hormone",name:"Growth Hormone",description:"The companion increases by one size category, its Hit Die size increases by one step, and its hit point maximum increases by 1 per Hit Die. This augment can be taken multiple times, but the companion cannot exceed the maximum size permitted by the Tamer's level.",cost:4,repeatable:true,maxCount:4,growth:true}
+];
+
+
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -80,6 +112,110 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static getMaxCompanionSize(level) { if (level >= 13) return "Huge"; if (level >= 9) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
   static getMaxCompanionCR(level) { if (level >= 19) return 6; if (level >= 16) return 5; if (level >= 13) return 4; if (level >= 10) return 3; if (level >= 7) return 2; if (level >= 4) return 1; return 0.5; }
+
+  static isSplicer(actor) {
+    return Boolean(actor?.items?.some(item => {
+      const name = String(item.name ?? "").trim().toLowerCase();
+      const identifier = String(item.system?.identifier ?? "").trim().toLowerCase();
+      return name === "splicer" || identifier === "splicer";
+    }));
+  }
+
+  static getSplicerAugmentRegistry() {
+    const configured = foundry.utils.deepClone(game.settings.get(MODULE_ID, "splicerAugments") ?? []);
+    return configured.length ? configured : foundry.utils.deepClone(DEFAULT_SPLICER_AUGMENTS);
+  }
+
+  static getSplicerTotalPoints(tamer) {
+    const level = this.getTamerLevel(tamer);
+    return level >= 3 ? level : 0;
+  }
+
+  static getSplicerAssignments(record) {
+    return Array.isArray(record?.splicer?.augments)
+      ? foundry.utils.deepClone(record.splicer.augments)
+      : [];
+  }
+
+  static getSplicerSpentPoints(record) {
+    const registry = new Map(this.getSplicerAugmentRegistry().map(augment => [String(augment.id), augment]));
+    return this.getSplicerAssignments(record).reduce((total, entry) => {
+      const augment = registry.get(String(entry?.id));
+      const count = Math.max(0, Number(entry?.count ?? 0));
+      return total + (augment ? Number(augment.cost ?? 0) * count : 0);
+    }, 0);
+  }
+
+  static getSplicerAvailablePoints(tamer, record) {
+    return Math.max(0, this.getSplicerTotalPoints(tamer) - this.getSplicerSpentPoints(record));
+  }
+
+  static validateSplicerAssignments(tamer, record, assignments) {
+    const level = this.getTamerLevel(tamer);
+    const registry = new Map(this.getSplicerAugmentRegistry().map(augment => [String(augment.id), augment]));
+    const normalized = [];
+    const seen = new Set();
+    const errors = [];
+
+    for (const raw of Array.isArray(assignments) ? assignments : []) {
+      const id = String(raw?.id ?? "").trim();
+      const count = Math.floor(Number(raw?.count ?? 0));
+      if (!id || count <= 0) continue;
+      const augment = registry.get(id);
+      if (!augment) {
+        errors.push(`Unknown Splicer augment: ${id}`);
+        continue;
+      }
+      if (seen.has(id)) {
+        errors.push(`Duplicate Splicer augment entry: ${augment.name}`);
+        continue;
+      }
+      seen.add(id);
+
+      const maxCount = Number(augment.maxCount ?? (augment.repeatable ? 999 : 1));
+      if (!augment.repeatable && count > 1) errors.push(`${augment.name} cannot be taken more than once.`);
+      if (count > maxCount) errors.push(`${augment.name} can be taken at most ${maxCount} time${maxCount === 1 ? "" : "s"}.`);
+      if (count > 1 && augment.minLevelForSecond && level < Number(augment.minLevelForSecond)) {
+        errors.push(`${augment.name} requires Tamer level ${augment.minLevelForSecond} for its second application.`);
+      }
+      if (augment.exclusiveGroup) {
+        const conflicting = normalized.find(entry => {
+          const other = registry.get(String(entry.id));
+          return other?.exclusiveGroup === augment.exclusiveGroup && String(entry.id) !== id;
+        });
+        if (conflicting) errors.push(`${augment.name} cannot be combined with ${conflicting.name}.`);
+      }
+
+      normalized.push({ id, count });
+    }
+
+    const spent = normalized.reduce((total, entry) => {
+      const augment = registry.get(entry.id);
+      return total + Number(augment?.cost ?? 0) * entry.count;
+    }, 0);
+
+    const total = this.getSplicerTotalPoints(tamer);
+    if (spent > total) errors.push(`Splicer Points exceeded: ${spent}/${total} spent.`);
+
+    return { valid: errors.length === 0, errors, assignments: normalized, spent, total, available: Math.max(0, total - spent) };
+  }
+
+  static async setSplicerAssignments(tamer, record, assignments) {
+    if (!tamer || !record) return false;
+    const validation = this.validateSplicerAssignments(tamer, record, assignments);
+    if (!validation.valid) {
+      ui.notifications.error(validation.errors[0] ?? "The Splicer augment selection is invalid.");
+      return false;
+    }
+    const records = this.records(tamer);
+    const target = records.find(entry => entry.id === record.id);
+    if (!target) return false;
+    target.splicer ??= {};
+    target.splicer.augments = validation.assignments;
+    await this.save(tamer, records);
+    return true;
+  }
+
   static getStandardImprovementSources() { return foundry.utils.deepClone(game.settings.get(MODULE_ID, "standardImprovementSources") ?? []); }
   static async getStandardImprovementItems() { return this.resolveSources(this.getStandardImprovementSources()); }
   static async resolveSources(sources) {
@@ -1485,6 +1621,57 @@ class TamerCompanionSourceRegistry extends HandlebarsApplicationMixin(Applicatio
   static async _onCancel() { await this.close(); }
 }
 
+
+class TamerSplicerAugmentRegistry extends HandlebarsApplicationMixin(ApplicationV2) {
+  static DEFAULT_OPTIONS = {
+    id: "tcm-splicer-augments",
+    classes: ["tcm-splicer-augments"],
+    window: { title: "Splicer Augments", icon: "fa-solid fa-dna", resizable: true },
+    position: { width: 860, height: 720 },
+    actions: { save: this._onSave, reset: this._onReset, cancel: this._onCancel }
+  };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/splicer-augment-registry.hbs`, root: true } };
+
+  async _prepareContext() {
+    const augments = TamerCompanionManager.getSplicerAugmentRegistry();
+    return { augments };
+  }
+
+  static async _onSave() {
+    const rows = [...document.querySelectorAll("#tcm-splicer-augment-registry .tcm-splicer-registry-row")];
+    const augments = rows.map(row => ({
+      id: String(row.dataset.id ?? "").trim(),
+      name: String(row.querySelector("[name='name']")?.value ?? "").trim(),
+      description: String(row.querySelector("[name='description']")?.value ?? "").trim(),
+      cost: Math.max(0, Math.floor(Number(row.querySelector("[name='cost']")?.value ?? 0))),
+      repeatable: Boolean(row.querySelector("[name='repeatable']")?.checked),
+      maxCount: Math.max(1, Math.floor(Number(row.querySelector("[name='maxCount']")?.value ?? 1))),
+      minLevelForSecond: Math.max(0, Math.floor(Number(row.querySelector("[name='minLevelForSecond']")?.value ?? 0))) || null,
+      exclusiveGroup: String(row.querySelector("[name='exclusiveGroup']")?.value ?? "").trim() || null,
+      growth: Boolean(row.querySelector("[name='growth']")?.checked)
+    })).filter(augment => augment.id && augment.name);
+
+    const ids = new Set();
+    for (const augment of augments) {
+      if (ids.has(augment.id)) return ui.notifications.warn(`Duplicate augment ID: ${augment.id}`);
+      ids.add(augment.id);
+    }
+
+    await game.settings.set(MODULE_ID, "splicerAugments", augments);
+    ui.notifications.info(`Splicer augment registry saved. ${augments.length} augment definitions configured.`);
+  }
+
+  static async _onReset() {
+    await game.settings.set(MODULE_ID, "splicerAugments", foundry.utils.deepClone(DEFAULT_SPLICER_AUGMENTS));
+    ui.notifications.info("Splicer augment registry reset to the V1.9 defaults.");
+    for (const app of Object.values(ui.windows ?? {})) {
+      if (app instanceof TamerSplicerAugmentRegistry) await app.render({ force: true });
+    }
+  }
+
+  static async _onCancel() { await this.close(); }
+}
+
 class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS={id:"tamer-bespoke-improvements",window:{title:"Bespoke Companion Improvements",icon:"fa-solid fa-tree"},position:{width:720,height:620},actions:{addTree:this._onAddTree,saveTree:this._onSaveTree,editTree:this._onEditTree,removeTree:this._onRemoveTree,cancelEdit:this._onCancelEdit,removeStandardSource:this._onRemoveStandardSource,removeTreeSource:this._onRemoveTreeSource}};
   static PARTS={main:{template:`modules/${MODULE_ID}/templates/improvement-registry.hbs`,root:true}};
@@ -1547,6 +1734,7 @@ Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "companionSourcePacks", { scope: "world", config: false, type: Array, default: [] });
   game.settings.registerMenu(MODULE_ID, "openImprovementRegistry", { name: "Bespoke Companion Improvements", label: "Register Improvements", hint: "Register additional improvement trees for bespoke companions.", icon: "fa-solid fa-tree", type: TamerCompanionImprovementRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openCompanionSources", { name: "Companion Sources", label: "Configure Companion Sources", hint: "Choose which Actor compendiums the Add Companion browser can use.", icon: "fa-solid fa-database", type: TamerCompanionSourceRegistry, restricted: true });
+  game.settings.registerMenu(MODULE_ID, "openSplicerAugments", { name: "Splicer Augments", label: "Configure Splicer Augments", hint: "Configure the Splicer augment registry, including costs and repeatability.", icon: "fa-solid fa-dna", type: TamerSplicerAugmentRegistry, restricted: true });
   game.settings.registerMenu(MODULE_ID, "openManager", { name: "Tamer Companion Manager", label: "Open Companion Manager", hint: "Open the Tamer Companion Manager using the first Tamer Actor you own.", icon: "fa-solid fa-paw", type: TamerCompanionManager, restricted: false });
   game.tamerCompanionManager = { open: actor => TamerCompanionManager.open(actor), isTamer: actor => TamerCompanionManager.isTamer(actor), getTamerLevel: actor => TamerCompanionManager.getTamerLevel(actor), getPocketFamilySlots: level => TamerCompanionManager.getPocketFamilySlots(level) };
   const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
@@ -1697,3 +1885,4 @@ Hooks.once("init", () => {
 globalThis.TamerCompanionManager = TamerCompanionManager;
 
 globalThis.TamerCompanionImprovementRegistry = TamerCompanionImprovementRegistry;
+globalThis.TamerSplicerAugmentRegistry = TamerSplicerAugmentRegistry;
