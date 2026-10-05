@@ -173,7 +173,7 @@ class TamerCompanionSheetTab {
       if (action === "addCompanion") {
         const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(controller.tamer));
         if (records.length >= max) return ui.notifications.warn("No Pocket Family slot is available.");
-        await new TamerCompanionBrowser({ tamer: controller.tamer, manager: controller }).render({ force: true });
+        await TamerCompanionManager._onAddCompanion.call(controller);
         return;
       }
 
