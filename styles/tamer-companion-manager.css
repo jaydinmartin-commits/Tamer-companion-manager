@@ -582,3 +582,11 @@
 .tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-slot i,.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-slot strong{color:var(--color-border-highlight,#d9a441)}
 .tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-empty-slot small{color:var(--color-text-primary,#eee)}
 @media(max-width:650px){.tcm-sheet-tab-content[data-tcm-tab="tcm-companions"] .tcm-companion-grid{grid-template-columns:1fr;grid-auto-rows:250px}}
+
+/* Native sheet chrome hidden while Companion Manager is active. The selectors
+   intentionally cover the dnd5e v6 ability-score container variants without
+   touching the portrait, HP, AC, or navigation. */
+.tcm-companions-active [data-container-id="abilities"],
+.tcm-companions-active [data-container-id="ability-scores"],
+.tcm-companions-active .ability-scores,
+.tcm-companions-active .abilities{display:none!important}
