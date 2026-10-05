@@ -996,7 +996,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const denomination = Number(record.hitDiceBaseDenomination ?? formula.denomination ?? 4);
       const target = this.getProgression(record, actor, this.getTamerLevel(tamer)).totalBonusHitDice;
       const desiredCount = Math.max(1, baseCount + target);
-      const desiredFormula = `${desiredCount}d${denomination}`;
+      const con = this.getCompanionConstitutionModifier(actor);
+      const conTotal = desiredCount * con;
+      const conText = conTotal >= 0 ? `+ ${conTotal}` : `- ${Math.abs(conTotal)}`;
+      const desiredFormula = `${desiredCount}d${denomination} ${conText}`;
 
       if (String(actor.system?.attributes?.hp?.formula ?? "").trim() !== desiredFormula) {
         await actor.update({"system.attributes.hp.formula": desiredFormula});
