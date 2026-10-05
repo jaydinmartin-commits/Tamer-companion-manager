@@ -438,7 +438,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         .trim();
     } else {
       const text = this.getImprovementDescription(item);
-      const match = text.match(/Prerequisite\s*:\s*([^\n.]+)/i);
+      const match = text.match(/Prerequisite\s*:\s*([^
+.]+)/i);
       if (!match) return { text: "", level: 0, names: [] };
       raw = match[1].trim();
     }
@@ -2186,4 +2187,5 @@ Hooks.once("init", () => {
 globalThis.TamerCompanionManager = TamerCompanionManager;
 
 globalThis.TamerCompanionImprovementRegistry = TamerCompanionImprovementRegistry;
-globalThis.TamerSplicerAugmentRegistry = TamerSplicerAugmentRegistry;\nglobalThis.TamerSplicerAugmentManager = TamerSplicerAugmentManager;\n
+globalThis.TamerSplicerAugmentRegistry = TamerSplicerAugmentRegistry;
+globalThis.TamerSplicerAugmentManager = TamerSplicerAugmentManager;
