@@ -22,6 +22,11 @@
     <div class="tcm-companion-grid">
     {{#each companions}}
       <article class="tcm-card {{#if summoned}}is-summoned{{/if}}">
+        {{#if vessel}}
+          <button type="button" class="tcm-vessel-clear" data-action="clearVessel" data-index="{{index}}" title="Unbind vessel" aria-label="Unbind vessel">
+            <i class="fa-solid fa-recycle" aria-hidden="true"></i>
+          </button>
+        {{/if}}
         <div class="tcm-card-image">
           <img src="{{img}}" alt="{{name}}">
           <span class="tcm-status {{#if summoned}}summoned{{else}}vessel{{/if}}">
@@ -40,7 +45,7 @@
           <div class="tcm-stats">
             <div><span>HP</span><strong>{{hp}} / {{hpMax}}</strong></div>
             <div><span>AC</span><strong>{{ac}}</strong></div>
-            <div class="tcm-vessel-field {{#unless vessel}}unavailable{{/unless}}"><span>Vessel</span>{{#if vessel}}<strong>{{vessel}}</strong>{{else}}<strong>Summon Unavailable</strong>{{/if}}</div>
+            <div class="tcm-vessel-field {{#unless vessel}}unavailable{{/unless}}"><span>Vessel</span>{{#if vessel}}<strong>{{vessel}}</strong>{{else}}<strong>No vessel assigned</strong>{{/if}}</div>
           </div>
 
           <div class="tcm-improvements">
@@ -74,7 +79,6 @@
               </button>
             {{/if}}
 
-            {{#if vessel}}<button type="button" data-action="clearVessel" data-index="{{index}}" title="Remove vessel assignment"><i class="fa-solid fa-box"></i></button>{{/if}}
             <button type="button" data-action="unlinkCompanion" data-index="{{index}}" title="Unlink">
               <i class="fa-solid fa-link-slash"></i>
             </button>
@@ -86,7 +90,7 @@
     {{#each pocketFamily.empty}}
       <article class="tcm-empty-slot tcm-drop-zone">
         <i class="fa-solid fa-plus"></i>
-        <span>Empty Pocket Family Slot</span>
+        <strong>Empty Companion Slot</strong>
         <small>Drag an Actor here to bond it.</small>
       </article>
     {{/each}}
@@ -94,8 +98,8 @@
     {{#unless companions.length}}
       <div class="tcm-empty-state">
         <i class="fa-solid fa-paw"></i>
-        <h3>No Companions Linked</h3>
-        <p>Drag an Actor onto an empty Pocket Family slot, or use <strong>Add Companion</strong>.</p>
+        <h3>No Companions</h3>
+        <p>Drag an Actor here to bond it, or use <strong>Add Companion</strong>.</p>
       </div>
     {{/unless}}
   </div>
