@@ -454,3 +454,51 @@
   #tamer-companion-manager .tcm-companion-grid{grid-template-columns:1fr}
   #tamer-companion-manager .tcm-card-image{flex-basis:70px;width:70px}
 }
+
+
+/* v0.1.71 companion manager visual refresh */
+#tamer-companion-manager .tcm-root{background:linear-gradient(180deg,rgba(255,255,255,.018),transparent 22%),var(--color-cool-5,#1f1f24)}
+#tamer-companion-manager .tcm-companion-grid{grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:9px;padding:10px 13px 12px}
+#tamer-companion-manager .tcm-card{display:grid;grid-template-columns:minmax(70px,24%) minmax(0,1fr);min-height:0;height:max-content;align-self:start}
+#tamer-companion-manager .tcm-card-image{width:auto;min-width:0;min-height:0;height:100%;aspect-ratio:3 / 5;flex:none;overflow:hidden;background:rgba(0,0,0,.18)}
+#tamer-companion-manager .tcm-card-image img{width:100%;height:100%;min-height:0;object-fit:cover;object-position:center top}
+#tamer-companion-manager .tcm-card-body{min-width:0;padding:8px;gap:6px}
+#tamer-companion-manager .tcm-card-heading{min-width:0}
+#tamer-companion-manager .tcm-card-heading>div{min-width:0}
+#tamer-companion-manager .tcm-card-heading h3{font-size:.92rem}
+#tamer-companion-manager .tcm-type{font-size:.68rem}
+#tamer-companion-manager .tcm-slot{font-size:.59rem}
+#tamer-companion-manager .tcm-stats{grid-template-columns:minmax(0,1fr) minmax(0,.7fr);gap:5px 9px;padding:5px 0}
+#tamer-companion-manager .tcm-vessel-field strong{font-size:.74rem}
+#tamer-companion-manager .tcm-vessel-field.unavailable strong{opacity:.75;font-style:italic}
+#tamer-companion-manager .tcm-improvements{min-width:0;align-items:center}
+#tamer-companion-manager .tcm-improvements>div{min-width:0}
+#tamer-companion-manager .tcm-improvements button{min-width:0;max-width:54%;overflow:hidden}
+#tamer-companion-manager .tcm-improvements button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tamer-companion-manager .tcm-vessel-drop-zone{position:relative;width:100%;height:38px;min-height:38px;padding:3px;border:1px dashed var(--tcm-border-soft);border-radius:5px;background:rgba(255,255,255,.012);display:flex;align-items:center;justify-content:center;overflow:hidden;opacity:.8}
+#tamer-companion-manager .tcm-vessel-drop-zone:not(.has-vessel){border-style:dashed}
+#tamer-companion-manager .tcm-vessel-drop-zone:hover{opacity:1;border-color:var(--tcm-accent);background:rgba(217,164,65,.06)}
+#tamer-companion-manager .tcm-vessel-placeholder{font-size:1.05rem;opacity:.65}
+#tamer-companion-manager .tcm-vessel-drop-zone.has-vessel{height:44px;min-height:44px;border-style:solid;background:rgba(0,0,0,.1)}
+#tamer-companion-manager .tcm-vessel-drop-zone.has-vessel .tcm-vessel-icon{display:block;width:100%;height:100%;min-width:0;min-height:0;object-fit:contain;border-radius:3px}
+#tamer-companion-manager .tcm-vessel-replace{position:absolute;top:3px;right:3px;width:20px!important;height:20px;min-height:20px!important;padding:0!important;display:flex;align-items:center;justify-content:center;border:1px solid var(--tcm-border-soft);border-radius:50%!important;background:rgba(0,0,0,.72);font-size:.62rem;z-index:2}
+#tamer-companion-manager .tcm-vessel-replace i{margin:0}
+#tamer-companion-manager .tcm-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px;gap:5px}
+#tamer-companion-manager .tcm-actions button{width:100%;min-width:0;overflow:hidden}
+#tamer-companion-manager .tcm-actions button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tamer-companion-manager .tcm-actions button:last-child{width:34px}
+#tamer-companion-manager .tcm-bottom-info{padding:0 13px 7px}
+#tamer-companion-manager .tcm-soul-bond{border-color:color-mix(in srgb,#4caf50 50%,var(--tcm-border-soft));background:color-mix(in srgb,#4caf50 8%,var(--tcm-panel));color:#8edb94}
+#tamer-companion-manager .tcm-soul-bond-heading i{color:#66bb6a}
+#tamer-companion-manager .tcm-soul-bond-heading strong{font-size:.78rem}
+#tamer-companion-manager .tcm-soul-bond-heading>strong{font-size:.8rem}
+#tamer-companion-manager .tcm-footer{padding:5px 13px}
+@media (max-width:760px){
+  #tamer-companion-manager .tcm-companion-grid{grid-template-columns:1fr}
+  #tamer-companion-manager .tcm-card{grid-template-columns:minmax(70px,22%) minmax(0,1fr)}
+}
+@media (max-width:500px){
+  #tamer-companion-manager .tcm-card{grid-template-columns:minmax(64px,24%) minmax(0,1fr)}
+  #tamer-companion-manager .tcm-card-body{padding:7px}
+  #tamer-companion-manager .tcm-toolbar button span{font-size:.72rem}
+}
