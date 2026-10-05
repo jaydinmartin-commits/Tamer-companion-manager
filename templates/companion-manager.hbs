@@ -18,8 +18,8 @@
       <article class="tcm-card {{#if summoned}}is-summoned{{/if}}">
         <div class="tcm-card-image">
           <img src="{{img}}" alt="{{name}}">
-          <span class="tcm-status {{#if summoned}}summoned{{else}}vessel{{/if}}">
-            {{#if summoned}}Summoned{{else}}In Vessel{{/if}}
+          <span class="tcm-status {{#if summoned}}summoned{{else}}{{#if vessel}}vessel{{else}}unassigned{{/if}}{{/if}}">
+            {{#if summoned}}Summoned{{else}}{{#if vessel}}In Vessel{{else}}No Vessel{{/if}}{{/if}}
           </span>
         </div>
 
