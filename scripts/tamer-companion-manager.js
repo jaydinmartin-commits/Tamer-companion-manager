@@ -214,7 +214,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const level = this.getTamerLevel(tamer);
     const progression = this.getProgression(record, actor, level);
     const standard = await this.getStandardImprovementItems();
-    const tree = await this.findBespokeTree(actor);
+    const registeredTree = record?.bespokeTreeId
+      ? this.getImprovementRegistry().find(tree => String(tree.id) === String(record.bespokeTreeId))
+      : null;
+    const tree = registeredTree ?? await this.findBespokeTree(actor);
     const bespoke = tree ? await this.resolveTreeItems(tree) : [];
     const sources = new Map();
     for (const item of standard) sources.set(item.uuid, { item, tree: "Monster Trainer Improvements" });
@@ -840,6 +843,71 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     return true;
   }
 
+  static _improvementSyncLocks = new Map();
+
+  static async syncCompanionImprovements(tamer, {notify = true} = {}) {
+    if (!tamer || !this.isTamer(tamer)) return false;
+    const lockKey = tamer.uuid ?? tamer.id;
+    if (this._improvementSyncLocks.has(lockKey)) return this._improvementSyncLocks.get(lockKey);
+
+    const operation = (async () => {
+      const level = this.getTamerLevel(tamer);
+      const records = this.records(tamer);
+      let changed = false;
+
+      for (const record of records) {
+        const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
+        if (!actor) continue;
+
+        record.improvements ??= [];
+        const progression = this.getProgression(record, actor, level);
+        const progressionEntries = record.improvements.filter(entry =>
+          !entry?.isBonus &&
+          Number(entry?.assignedAtLevel ?? 0) > level
+        );
+
+        // Leveling down: remove only improvements that were gained above the
+        // new Tamer level. Legacy entries without assignedAtLevel are preserved.
+        if (progressionEntries.length) {
+          for (const entry of progressionEntries.sort((a, b) =>
+            Number(b.assignedAtLevel ?? 0) - Number(a.assignedAtLevel ?? 0)
+          )) {
+            const removed = await this.deleteImprovementItem(actor, entry.itemUuid);
+            if (!removed) continue;
+            record.improvements = record.improvements.filter(entry2 => entry2 !== entry);
+            changed = true;
+          }
+        }
+
+        // Re-read after any rollback. If the companion is behind its level-based
+        // progression, open the existing picker so the player can fill the
+        // missing advancement slots with either standard or bespoke choices.
+        const refreshed = this.getProgression(record, actor, level);
+        if (refreshed.pending > 0) {
+          const managed = await this.manageImprovements(tamer, record, actor);
+          if (managed) changed = true;
+        }
+      }
+
+      if (changed) await this.save(tamer, records);
+      if (notify && changed) {
+        for (const app of Object.values(ui.windows ?? {})) {
+          if (app instanceof TamerCompanionManager && app.tamer?.id === tamer.id) {
+            await app.render({ force: true });
+          }
+        }
+      }
+      return changed;
+    })();
+
+    this._improvementSyncLocks.set(lockKey, operation);
+    try {
+      return await operation;
+    } finally {
+      this._improvementSyncLocks.delete(lockKey);
+    }
+  }
+
   static _hitDieSyncLocks = new Map();
 
   static async syncCompanionHitDice(tamer, {notify = true} = {}) {
@@ -1334,6 +1402,23 @@ Hooks.once("init", () => {
   const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
   Hooks.on("getHeaderControlsApplicationV2", addCompanionControl);
   Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
+  const syncTamerCompanionAdvancement = async actor => {
+    if (!actor || !TamerCompanionManager.isTamer(actor)) return;
+    if (!(actor.isOwner || game.user.isGM)) return;
+    try {
+      await TamerCompanionManager.syncCompanionImprovements(actor);
+      await TamerCompanionManager.syncCompanionHitDice(actor);
+      for (const app of Object.values(ui.windows ?? {})) {
+        if (app instanceof TamerCompanionManager && app.tamer?.id === actor.id) {
+          await app.render({ force: true });
+        }
+      }
+    } catch (error) {
+      console.error("[Tamer Companion Manager] Companion advancement synchronization failed.", error);
+      ui.notifications.error("Companion advancement could not be synchronized. See the console for details.");
+    }
+  };
+
   const syncTamerCompanionHitDice = async actor => {
     if (!actor || !TamerCompanionManager.isTamer(actor)) return;
     if (!(actor.isOwner || game.user.isGM)) return;
@@ -1353,7 +1438,7 @@ Hooks.once("init", () => {
   Hooks.on("updateActor", async (actor, changes) => {
     if (!TamerCompanionManager.isTamer(actor)) return;
     if (!Object.hasOwn(changes?.system?.details ?? {}, "level")) return;
-    await syncTamerCompanionHitDice(actor);
+    await syncTamerCompanionAdvancement(actor);
   });
 
   // Secondary trigger: some class advancement flows update the class Item directly.
@@ -1362,12 +1447,12 @@ Hooks.once("init", () => {
     const actor = item.parent;
     if (!actor || !TamerCompanionManager.isTamer(actor)) return;
     if (!Object.hasOwn(changes?.system ?? {}, "levels")) return;
-    await syncTamerCompanionHitDice(actor);
+    await syncTamerCompanionAdvancement(actor);
   });
 
   // Final fallback: the complete advancement flow has finished.
   Hooks.on("dnd5e.advancementManagerComplete", async manager => {
-    await syncTamerCompanionHitDice(manager?.actor);
+    await syncTamerCompanionAdvancement(manager?.actor);
   });
   Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
     if (config?.type !== "short" || !TamerCompanionManager.isTamer(actor)) return;
