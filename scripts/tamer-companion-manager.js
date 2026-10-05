@@ -1093,15 +1093,18 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       return null;
     }
   }
-  _canAcceptCompanionDrop(event) {
-    if (event?.target?.closest(".tcm-vessel-drop-zone")) return true;
-    if (!this.tamer || !TamerCompanionManager.isTamer(this.tamer)) return false;
-    const records = TamerCompanionManager.records(this.tamer), max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
-    return records.length < max;
+  _canAcceptCompanionDrop(selector) {
+    if (selector === ".tcm-vessel-drop-zone") return Boolean(this.tamer && TamerCompanionManager.isTamer(this.tamer));
+    if (selector === ".tcm-drop-zone") {
+      if (!this.tamer || !TamerCompanionManager.isTamer(this.tamer)) return false;
+      const records = TamerCompanionManager.records(this.tamer), max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
+      return records.length < max;
+    }
+    return false;
   }
   _onDragOverManager(event) {
-    if (!this._canAcceptCompanionDrop(event)) return;
-    event.dataTransfer.dropEffect = event.target.closest(".tcm-vessel-drop-zone") ? "copy" : "link";
+    const target = event.target?.closest?.(".tcm-vessel-drop-zone");
+    event.dataTransfer.dropEffect = target ? "copy" : "link";
   }
   async _onDropManager(event) {
     event.preventDefault();
