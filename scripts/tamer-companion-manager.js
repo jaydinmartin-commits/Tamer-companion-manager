@@ -1275,7 +1275,15 @@ Hooks.once("init", () => {
     }
   };
 
-  Hooks.on("updateItem", async (item, changes, options) => {
+  // Primary trigger: the Actor's overall level changes during the D&D 5e advancement.
+  Hooks.on("updateActor", async (actor, changes) => {
+    if (!TamerCompanionManager.isTamer(actor)) return;
+    if (!Object.hasOwn(changes?.system?.details ?? {}, "level")) return;
+    await syncTamerCompanionHitDice(actor);
+  });
+
+  // Secondary trigger: some class advancement flows update the class Item directly.
+  Hooks.on("updateItem", async (item, changes) => {
     if (item?.type !== "class") return;
     const actor = item.parent;
     if (!actor || !TamerCompanionManager.isTamer(actor)) return;
@@ -1283,6 +1291,7 @@ Hooks.once("init", () => {
     await syncTamerCompanionHitDice(actor);
   });
 
+  // Final fallback: the complete advancement flow has finished.
   Hooks.on("dnd5e.advancementManagerComplete", async manager => {
     await syncTamerCompanionHitDice(manager?.actor);
   });
