@@ -780,6 +780,44 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     return true;
   }
 
+  static async removeCompanionHitDice(tamer, record, actor, targetCount, level) {
+    const applied = this.getAppliedHitDice(record);
+    const target = Math.max(0, Number(targetCount));
+    const removeCount = Math.max(0, applied - target);
+    if (!removeCount) return true;
+
+    const choices = foundry.utils.deepClone(record.hitDiceChoices ?? {});
+    const keys = Object.keys(choices)
+      .sort((a, b) => Number(b) - Number(a))
+      .slice(0, removeCount);
+
+    let hpReduction = 0;
+    for (const key of keys) {
+      hpReduction += Math.max(0, Number(choices[key]?.hpGain ?? 0));
+      delete choices[key];
+    }
+
+    const hpMax = Number(actor.system?.attributes?.hp?.max ?? 0);
+    const hpValue = Number(actor.system?.attributes?.hp?.value ?? 0);
+    const newMax = Math.max(0, hpMax - hpReduction);
+    const newValue = Math.min(hpValue, newMax);
+
+    await actor.update({
+      "system.attributes.hp.value": newValue,
+      "system.attributes.hp.max": newMax
+    });
+
+    record.hitDiceApplied = target;
+    record.hitDiceChoices = choices;
+
+    if (hpReduction > 0 && level !== undefined) {
+      ui.notifications.info(
+        `${actor.name} lost ${hpReduction} maximum HP from ${removeCount} Tamer Hit Die${removeCount === 1 ? "" : "s"} after leveling down.`
+      );
+    }
+    return true;
+  }
+
   static _hitDieSyncLocks = new Map();
 
   static async syncCompanionHitDice(tamer, {notify = true} = {}) {
@@ -795,7 +833,16 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!actor) continue;
       const target = this.getProgression(record, actor, level).bonusHitDice;
       const before = this.getAppliedHitDice(record);
+
+      if (target < before) {
+        const removed = await this.removeCompanionHitDice(tamer, record, actor, target, level);
+        if (!removed) continue;
+        changed = true;
+        continue;
+      }
+
       if (target <= before) continue;
+
       const applied = await this.applyCompanionHitDice(tamer, record, actor, target, level);
       if (!applied) continue;
       changed = true;
