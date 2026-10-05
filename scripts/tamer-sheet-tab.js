@@ -85,6 +85,7 @@ class TamerCompanionSheetTab {
         const nativeTab = event.target?.closest?.("[data-tab]");
         if (!nativeTab || nativeTab === tab) return;
         controller._tcmTabActive = false;
+        root.classList.remove("tcm-companions-active");
         content.classList.remove("active");
         content.hidden = true;
         content.style.display = "none";
@@ -186,6 +187,7 @@ class TamerCompanionSheetTab {
       section.style.removeProperty("pointer-events");
     }
 
+    root.classList.add("tcm-companions-active");
     tab.classList.add("active");
     tab.setAttribute("aria-selected", "true");
     content.hidden = false;
