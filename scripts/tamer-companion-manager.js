@@ -7,10 +7,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(options = {}) {
     super(options);
     this.tamer = options.tamer ?? null;
-    this._tcmDragDrop = new foundry.applications.ux.DragDrop({ dragSelector: null, dropSelector: ".tcm-drop-zone", permissions: { drop: () => this._canAcceptCompanionDrop() }, callbacks: { drop: event => this._onDropCompanion(event), dragover: event => this._onDragOverCompanion(event) } });
+    this._tcmDragDrop = new foundry.applications.ux.DragDrop({ dragSelector: null, dropSelector: ".tcm-drop-zone, .tcm-vessel-drop-zone", permissions: { drop: event => this._canAcceptCompanionDrop(event) }, callbacks: { drop: event => this._onDropManager(event), dragover: event => this._onDragOverManager(event) } });
   }
 
-  static DEFAULT_OPTIONS = { id: "tamer-companion-manager", classes: ["tamer-companion-manager"], window: { title: "Tamer Companions", icon: "fa-solid fa-paw", resizable: true }, position: { width: 760, height: 650 }, actions: { refresh: this._onRefresh, addCompanion: this._onAddCompanion, openCompanion: this._onOpenCompanion, summonCompanion: this._onSummonCompanion, dismissCompanion: this._onDismissCompanion, unlinkCompanion: this._onUnlinkCompanion, openTamer: this._onOpenTamer, trainCompanion: this._onTrainCompanion } };
+  static DEFAULT_OPTIONS = { id: "tamer-companion-manager", classes: ["tamer-companion-manager"], window: { title: "Tamer Companions", icon: "fa-solid fa-paw", resizable: true }, position: { width: 760, height: 650 }, actions: { refresh: this._onRefresh, addCompanion: this._onAddCompanion, openCompanion: this._onOpenCompanion, summonCompanion: this._onSummonCompanion, dismissCompanion: this._onDismissCompanion, unlinkCompanion: this._onUnlinkCompanion, openTamer: this._onOpenTamer, trainCompanion: this._onTrainCompanion, clearVessel: this._onClearVessel } };
   static PARTS = { main: { template: `modules/${MODULE_ID}/templates/companion-manager.hbs`, root: true } };
 
   async _prepareContext() {
@@ -32,13 +32,37 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const level = TamerCompanionManager.getTamerLevel(this.tamer), slots = TamerCompanionManager.getPocketFamilySlots(level), records = TamerCompanionManager.records(this.tamer);
-    const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: record.vesselName || "No vessel assigned", linked: Boolean(actor), summoned: Boolean(token), progression }; }));
+    const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; const vessel = await TamerCompanionManager.getVessel(record, this.tamer); return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: vessel?.name ?? record.vesselName ?? "No vessel assigned", vesselEquipped: Boolean(vessel?.system?.equipped), linked: Boolean(actor), summoned: Boolean(token), progression }; }));
     const soulBondFeature = TamerCompanionManager.getSoulBondFeature(this.tamer);
     const soulBond = soulBondFeature ? { current: Number(soulBondFeature.system?.uses?.value ?? 0), max: Number(soulBondFeature.system?.uses?.max ?? 0) } : { current: 0, max: 0 };
     return { tamer: { name: this.tamer.name, img: this.tamer.img, level }, pocketFamily: { slots, occupied: companions.length, empty: Array.from({ length: Math.max(0, slots - companions.length) }, (_, i) => i) }, limits: { size: TamerCompanionManager.getMaxCompanionSize(level), cr: TamerCompanionManager.getMaxCompanionCR(level) }, soulBond, companions };
   }
 
   static records(actor) { return foundry.utils.deepClone(actor.getFlag(MODULE_ID, FLAG_KEY) ?? []); }
+  static async getVessel(record, tamer) {
+    if (!record?.vesselUuid || !tamer) return null;
+    const vessel = await fromUuid(record.vesselUuid).catch(() => null);
+    if (!vessel || vessel.documentName !== "Item" || vessel.parent?.uuid !== tamer.uuid) return null;
+    return vessel;
+  }
+  static async setVessel(tamer, record, item) {
+    if (!tamer || !record || !item || item.documentName !== "Item") return false;
+    if (item.parent?.uuid !== tamer.uuid) { ui.notifications.warn("A companion vessel must be an Item on the Tamer."); return false; }
+    const records = this.records(tamer), target = records.find(r => r.id === record.id);
+    if (!target) return false;
+    if (records.some(r => r.id !== target.id && r.vesselUuid === item.uuid)) { ui.notifications.warn("That vessel is already assigned to another companion."); return false; }
+    target.vesselUuid = item.uuid; target.vesselName = item.name;
+    await this.save(tamer, records);
+    ui.notifications.info(`${item.name} is now the vessel for ${target.name ?? "this companion"}.`);
+    return true;
+  }
+  static async clearVessel(tamer, record) {
+    const records = this.records(tamer), target = records.find(r => r.id === record?.id);
+    if (!target) return false;
+    target.vesselUuid = null; target.vesselName = "";
+    await this.save(tamer, records);
+    return true;
+  }
   static async save(actor, records) { await actor.setFlag(MODULE_ID, FLAG_KEY, records); }
   static isTamer(actor) { return Boolean(actor?.items?.some(item => item.type === "class" && (String(item.name ?? "").trim().toLowerCase() === "tamer" || String(item.system?.identifier ?? "").trim().toLowerCase() === "tamer"))); }
   static getTamerLevel(actor) { const cls = actor?.items?.find(item => item.type === "class" && (String(item.name ?? "").trim().toLowerCase() === "tamer" || String(item.system?.identifier ?? "").trim().toLowerCase() === "tamer")); const classLevel = Number(cls?.system?.levels ?? cls?.system?.level ?? 0); return classLevel > 0 ? classLevel : Number(actor?.system?.details?.level ?? 0); }
@@ -1042,6 +1066,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async summon(tamer, record) {
     if (!canvas?.scene) return ui.notifications.warn("A scene must be active.");
+    const vessel = await this.getVessel(record, tamer);
+    if (!vessel) return ui.notifications.warn("This companion has no valid vessel assigned. Assign its vessel to the companion first.");
+    if (vessel.system?.equipped !== true) return ui.notifications.warn(`${vessel.name} must be equipped before this companion can be summoned.`);
     const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
     if (!actor) return ui.notifications.error("The companion Actor could not be found.");
     const records = this.records(tamer);
@@ -1066,9 +1093,42 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       return null;
     }
   }
-  _canAcceptCompanionDrop() { if (!this.tamer || !TamerCompanionManager.isTamer(this.tamer)) return false; const records = TamerCompanionManager.records(this.tamer), max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer)); return records.length < max; }
-  _onDragOverCompanion(event) { if (!this._canAcceptCompanionDrop()) return; event.dataTransfer.dropEffect = "link"; }
-  async _onDropCompanion(event) { event.preventDefault(); if (!this._canAcceptCompanionDrop()) return ui.notifications.warn("No Pocket Family slot is available."); const data = TextEditor.getDragEventData(event); if (data?.type !== "Actor") return ui.notifications.warn("Only Actor documents can be added as companions."); let actor = data.uuid ? await fromUuid(data.uuid).catch(() => null) : null; if (!actor && globalThis.Actor?.implementation?.fromDropData) actor = await Actor.implementation.fromDropData(data).catch(() => null); if (!actor) return ui.notifications.error("The dropped Actor could not be resolved."); await this._linkCompanion(actor); }
+  _canAcceptCompanionDrop(event) {
+    if (event?.target?.closest(".tcm-vessel-drop-zone")) return true;
+    if (!this.tamer || !TamerCompanionManager.isTamer(this.tamer)) return false;
+    const records = TamerCompanionManager.records(this.tamer), max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
+    return records.length < max;
+  }
+  _onDragOverManager(event) {
+    if (!this._canAcceptCompanionDrop(event)) return;
+    event.dataTransfer.dropEffect = event.target.closest(".tcm-vessel-drop-zone") ? "copy" : "link";
+  }
+  async _onDropManager(event) {
+    event.preventDefault();
+    if (event.target.closest(".tcm-vessel-drop-zone")) return this._onDropVessel(event);
+    return this._onDropCompanion(event);
+  }
+  async _onDropVessel(event) {
+    const zone = event.target.closest(".tcm-vessel-drop-zone"), index = Number(zone?.dataset.index);
+    const record = TamerCompanionManager.records(this.tamer)[index];
+    if (!record) return;
+    const data = TextEditor.getDragEventData(event);
+    if (data?.type !== "Item") return ui.notifications.warn("Drag an Item from the Tamer inventory to assign it as the vessel.");
+    const item = data.uuid ? await fromUuid(data.uuid).catch(() => null) : null;
+    if (!item) return ui.notifications.error("The vessel Item could not be resolved.");
+    if (item.parent?.uuid !== this.tamer.uuid) return ui.notifications.warn("The vessel must be an Item owned by the Tamer.");
+    if (await TamerCompanionManager.setVessel(this.tamer, record, item)) await this.render({ force: true });
+  }
+  async _onDropCompanion(event) {
+    event.preventDefault();
+    if (!this._canAcceptCompanionDrop(event)) return ui.notifications.warn("No Pocket Family slot is available.");
+    const data = TextEditor.getDragEventData(event);
+    if (data?.type !== "Actor") return ui.notifications.warn("Only Actor documents can be added as companions.");
+    let actor = data.uuid ? await fromUuid(data.uuid).catch(() => null) : null;
+    if (!actor && globalThis.Actor?.implementation?.fromDropData) actor = await Actor.implementation.fromDropData(data).catch(() => null);
+    if (!actor) return ui.notifications.error("The dropped Actor could not be resolved.");
+    await this._linkCompanion(actor);
+  }
   async _linkCompanion(actor) {
     const records=TamerCompanionManager.records(this.tamer), max=TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
     if(records.length>=max)return ui.notifications.warn("No Pocket Family slot is available.");
@@ -1184,6 +1244,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static async _onDismissCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)]; if (record && await TamerCompanionManager.dismiss(this.tamer, record)) await this.render({ force: true }); }
+  static async _onClearVessel(event, target) { const records = TamerCompanionManager.records(this.tamer), record = records[Number(target.dataset.index)]; if (!record) return; await TamerCompanionManager.clearVessel(this.tamer, record); await this.render({ force: true }); }
   static async _onUnlinkCompanion(event, target) { const records = TamerCompanionManager.records(this.tamer), record = records[Number(target.dataset.index)]; if (!record) return; const yes = await foundry.applications.api.DialogV2.confirm({ window: { title: "Unlink Companion" }, content: `<p>Unlink <strong>${foundry.utils.escapeHTML(record.name ?? "this companion")}</strong>?</p>`, yes: { label: "Unlink" }, no: { label: "Cancel" } }); if (!yes) return; if (record.tokenUuid) { const token = await fromUuid(record.tokenUuid).catch(() => null); if (token) await token.delete(); } records.splice(Number(target.dataset.index), 1); await TamerCompanionManager.save(this.tamer, records); await this.render({ force: true }); }
   static async _onOpenTamer() { await this.tamer.sheet?.render({ force: true }); }
 }
