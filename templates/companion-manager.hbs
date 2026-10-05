@@ -40,7 +40,7 @@
           <div class="tcm-stats">
             <div><span>HP</span><strong>{{hp}} / {{hpMax}}</strong></div>
             <div><span>AC</span><strong>{{ac}}</strong></div>
-            <div class="tcm-vessel-field"><span>Vessel</span><strong>{{vessel}}</strong><small>{{#if vesselEquipped}}Equipped — Summon Ready{{else}}Not Equipped — Summoning Blocked{{/if}}</small></div>
+            <div class="tcm-vessel-field {{#unless vessel}}unavailable{{/unless}}"><span>Vessel</span>{{#if vessel}}<strong>{{vessel}}</strong>{{else}}<strong>Summon Unavailable</strong>{{/if}}</div>
           </div>
 
           <div class="tcm-improvements">
