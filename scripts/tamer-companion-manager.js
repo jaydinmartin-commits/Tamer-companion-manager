@@ -1569,11 +1569,9 @@ class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!game.user.isGM && !pack.visible) return ui.notifications.warn("You do not have permission to access that compendium.");
 
     try {
-      // Foundry v14's DocumentCollection import workflow is more reliable for
-      // Actor compendium entries than relying on the legacy convenience path.
-      const source = await pack.getDocument(documentId);
-      if (!source) return ui.notifications.error("The selected companion could not be loaded from that compendium.");
-      const actor = await game.actors.importDocument(source);
+      // Foundry v14 provides a dedicated ActorCollection convenience method
+      // for importing an Actor directly from a CompendiumCollection.
+      const actor = await game.actors.importFromCompendium(pack, documentId);
       if (!actor) return ui.notifications.error("The companion could not be imported into the World.");
       await this.close();
       await this.manager?._linkCompanion(actor);
