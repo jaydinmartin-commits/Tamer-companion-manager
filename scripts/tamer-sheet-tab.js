@@ -35,7 +35,7 @@ class TamerCompanionSheetTab {
       tab.dataset.tab = TAB_ID;
       tab.dataset.group = group;
       tab.href = "#";
-      tab.innerHTML = '<i class="fa-solid fa-paw"></i><span>Companions</span>';
+      tab.innerHTML = '<i class="fa-solid fa-paw" aria-hidden="true"></i>';\n      tab.title = "Companions";\n      tab.setAttribute("aria-label", "Companions");
       nav.appendChild(tab);
     }
 
