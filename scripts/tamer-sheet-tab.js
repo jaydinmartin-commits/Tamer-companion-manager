@@ -1,3 +1,5 @@
+import { TamerCompanionManager } from "./tamer-companion-manager.js";
+
 const MODULE_ID = "tamer-companion-manager";
 const TAB_ID = "tcm-companions";
 
@@ -292,5 +294,3 @@ class TamerCompanionSheetTab {
 Hooks.once("init", () => {
   Hooks.on("renderActorSheetV2", (app, element) => TamerCompanionSheetTab.attach(app, element));
 });
-
-globalThis.TamerCompanionSheetTab = TamerCompanionSheetTab;
