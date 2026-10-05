@@ -109,3 +109,5 @@ Progression hardening release: corrected ASI-level Hit Die tracking, improved pr
 
 
 <!-- Release packaging uses .github/workflows/package-release.yml. -->
+
+<!-- Sheet integration release marker -->
