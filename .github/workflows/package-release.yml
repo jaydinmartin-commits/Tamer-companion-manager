@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   package:
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release-package]')
+    # Every main push packages the current module.json version. This keeps Foundry releases in sync with code changes.
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
