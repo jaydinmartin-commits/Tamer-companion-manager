@@ -849,7 +849,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   // level was reached by rollback so duplicate hooks cannot reopen the picker.
   static _improvementRollbackLocks = new Map();
 
-  static async syncCompanionImprovements(tamer, {notify = true} = {}) {
+  static async syncCompanionImprovements(tamer, {notify = true, allowAutomaticPrompt = false, levelDecreased = false} = {}) {
     if (!tamer || !this.isTamer(tamer)) return false;
     const lockKey = tamer.uuid ?? tamer.id;
     if (this._improvementSyncLocks.has(lockKey)) return this._improvementSyncLocks.get(lockKey);
@@ -869,37 +869,45 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
         record.improvements ??= [];
         const progression = this.getProgression(record, actor, level);
-        const progressionEntries = record.improvements.filter(entry =>
-          !entry?.isBonus &&
-          Number(entry?.assignedAtLevel ?? 0) > level
-        );
+        const selectedEntries = record.improvements.filter(entry => !entry?.isBonus);
 
-        // Leveling down: remove only improvements that were gained above the
-        // new Tamer level. Legacy entries without assignedAtLevel are preserved.
-        if (progressionEntries.length) {
-          // Set this before awaiting item deletions because additional Foundry
-          // advancement hooks can run after this operation completes.
-          this._improvementRollbackLocks.set(lockKey, level);
-          for (const entry of progressionEntries.sort((a, b) =>
-            Number(b.assignedAtLevel ?? 0) - Number(a.assignedAtLevel ?? 0)
-          )) {
-            const removed = await this.deleteImprovementItem(actor, entry.itemUuid);
-            if (!removed) continue;
-            record.improvements = record.improvements.filter(entry2 => entry2 !== entry);
-            changed = true;
+        // Leveling down is determined by the actual Tamer level transition,
+        // not by whether an improvement happens to contain assignedAtLevel.
+        // This also repairs older records created before assignedAtLevel was
+        // introduced by removing any excess non-bonus improvements.
+        if (levelDecreased) {
+          const excess = Math.max(0, selectedEntries.length - progression.target);
+          if (excess > 0) {
+            const entriesToRemove = [...selectedEntries]
+              .map((entry, index) => ({entry, index}))
+              .sort((a, b) => {
+                const aLevel = Number(a.entry.assignedAtLevel ?? 0);
+                const bLevel = Number(b.entry.assignedAtLevel ?? 0);
+                if (aLevel !== bLevel) return bLevel - aLevel;
+                return b.index - a.index;
+              })
+              .slice(0, excess)
+              .map(({entry}) => entry);
+
+            this._improvementRollbackLocks.set(lockKey, level);
+            for (const entry of entriesToRemove) {
+              const removed = await this.deleteImprovementItem(actor, entry.itemUuid);
+              if (!removed) continue;
+              record.improvements = record.improvements.filter(entry2 => entry2 !== entry);
+              changed = true;
+            }
+          } else {
+            this._improvementRollbackLocks.set(lockKey, level);
           }
         }
 
-        // Re-read after any rollback. If the companion is behind its level-based
-        // progression, open the existing picker so the player can fill the
-        // missing advancement slots with either standard or bespoke choices.
+        // Automatic selection is only legal when the Tamer actually advanced
+        // to a higher level. Being behind the target is not sufficient because
+        // duplicate advancement hooks and level-down reconciliation can also
+        // temporarily produce pending choices.
         const refreshed = this.getProgression(record, actor, level);
-        // A level-down rollback can temporarily leave the companion below the
-        // current target while the removed advancement is being reconciled.
-        // The rollback lock also covers duplicate hooks after the higher-level
-        // entries have already been removed.
         const rollbackLocked = this._improvementRollbackLocks.get(lockKey) === level;
-        if (!rollbackLocked && refreshed.pending > 0) {
+        if (allowAutomaticPrompt && !rollbackLocked && refreshed.pending > 0) {
           const managed = await this.manageImprovements(tamer, record, actor);
           if (managed) changed = true;
         }
@@ -1422,10 +1430,26 @@ Hooks.once("init", () => {
     if (!actor || !TamerCompanionManager.isTamer(actor)) return;
     if (!(actor.isOwner || game.user.isGM)) return;
     try {
+      const level = TamerCompanionManager.getTamerLevel(actor);
+      const previousLevel = Number(actor.getFlag(MODULE_ID, "lastAutomaticImprovementLevel"));
+      const hasPreviousLevel = Number.isFinite(previousLevel) && previousLevel > 0;
+      const levelIncreased = hasPreviousLevel && level > previousLevel;
+      const levelDecreased = hasPreviousLevel && level < previousLevel;
+
       // Resolve companion Hit Dice first so the HP choice is completed
       // before the improvement picker is presented on a level-up.
       await TamerCompanionManager.syncCompanionHitDice(actor);
-      await TamerCompanionManager.syncCompanionImprovements(actor);
+      await TamerCompanionManager.syncCompanionImprovements(actor, {
+        allowAutomaticPrompt: levelIncreased,
+        levelDecreased
+      });
+
+      // Persist the processed level. Duplicate advancement hooks at the same
+      // level therefore cannot be mistaken for another level-up.
+      if (!hasPreviousLevel || previousLevel !== level) {
+        await actor.setFlag(MODULE_ID, "lastAutomaticImprovementLevel", level);
+      }
+
       for (const app of Object.values(ui.windows ?? {})) {
         if (app instanceof TamerCompanionManager && app.tamer?.id === actor.id) {
           await app.render({ force: true });
