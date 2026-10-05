@@ -2183,8 +2183,9 @@ Hooks.once("init", () => {
   });
 });
 
-globalThis.TamerCompanionManager = TamerCompanionManager;
-
-globalThis.TamerCompanionImprovementRegistry = TamerCompanionImprovementRegistry;
-globalThis.TamerSplicerAugmentRegistry = TamerSplicerAugmentRegistry;
-globalThis.TamerSplicerAugmentManager = TamerSplicerAugmentManager;
+export {
+  TamerCompanionManager,
+  TamerCompanionImprovementRegistry,
+  TamerSplicerAugmentRegistry,
+  TamerSplicerAugmentManager
+};
