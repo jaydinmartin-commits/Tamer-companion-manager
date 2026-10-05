@@ -2162,15 +2162,23 @@ Hooks.once("init", () => {
   });
 
   Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
-    if (config?.type !== "short" || !TamerCompanionManager.isTamer(actor)) return;
+    if (!TamerCompanionManager.isTamer(actor)) return;
     if (!(actor.isOwner || game.user.isGM)) return;
     try {
-      if (await TamerCompanionManager.openSoulBond(actor)) {
-                  await TamerCompanionManager.refreshOpenManagers(actor);
+      if (config?.type === "long" && TamerCompanionManager.isSplicer(actor)) {
+        if (await TamerCompanionManager.applyPendingSplicerChanges(actor)) {
+          await TamerCompanionManager.refreshOpenManagers(actor);
+          ui.notifications.info("Splicer augment changes are now active.");
+        }
+      }
+      if (config?.type === "short") {
+        if (await TamerCompanionManager.openSoulBond(actor)) {
+          await TamerCompanionManager.refreshOpenManagers(actor);
+        }
       }
     } catch (error) {
-      console.error("[Tamer Companion Manager] Soul Bond short-rest handling failed.", error);
-      ui.notifications.error("Soul Bond could not be processed. See the browser console for details.");
+      console.error("[Tamer Companion Manager] Tamer rest handling failed.", error);
+      ui.notifications.error("Tamer rest handling could not be completed. See the browser console for details.");
     }
   });
 });
