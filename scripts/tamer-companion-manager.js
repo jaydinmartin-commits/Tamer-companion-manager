@@ -81,14 +81,30 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static records(actor) { return foundry.utils.deepClone(actor.getFlag(MODULE_ID, FLAG_KEY) ?? []); }
+  static isValidVesselItem(item) {
+    if (!item || item.documentName !== "Item") return false;
+
+    // D&D5e item types that can function as a physical companion vessel.
+    // Keep this deliberately narrow so classes, spells, feats, backgrounds,
+    // etc. can never appear in the vessel selector.
+    const allowedTypes = new Set([
+      "equipment",
+      "consumable",
+      "tool",
+      "loot"
+    ]);
+
+    return allowedTypes.has(String(item.type ?? "").toLowerCase());
+  }
+
   static async getVessel(record, tamer) {
     if (!record?.vesselUuid || !tamer) return null;
     const vessel = await fromUuid(record.vesselUuid).catch(() => null);
-    if (!vessel || vessel.documentName !== "Item" || vessel.parent?.uuid !== tamer.uuid) return null;
+    if (!vessel || !this.isValidVesselItem(vessel) || vessel.parent?.uuid !== tamer.uuid) return null;
     return vessel;
   }
   static async setVessel(tamer, record, item) {
-    if (!tamer || !record || !item || item.documentName !== "Item") return false;
+    if (!tamer || !record || !this.isValidVesselItem(item)) return false;
     if (item.parent?.uuid !== tamer.uuid) { ui.notifications.warn("A companion vessel must be an Item on the Tamer."); return false; }
     const records = this.records(tamer), target = records.find(r => r.id === record.id);
     if (!target) return false;
