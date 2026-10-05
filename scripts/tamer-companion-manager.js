@@ -1567,17 +1567,66 @@ class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
     const pack = game.packs.get(packCollection);
     if (!TamerCompanionBrowser.isActorPack(pack)) return ui.notifications.error("That companion source is no longer available.");
     if (!game.user.isGM && !pack.visible) return ui.notifications.warn("You do not have permission to access that compendium.");
+    if (!game.user.isGM && !game.user.can("ACTOR_CREATE")) {
+      return ui.notifications.error("You do not have permission to create World Actors. The companion cannot be imported.");
+    }
+
+    let actor = null;
+    try {
+      // Resolve the actual Actor first. This avoids relying on a compendium
+      // index entry being directly importable when a pack uses a custom index.
+      const source = await pack.getDocument(documentId);
+      if (!source) {
+        console.error("[Tamer Companion Manager] Companion compendium entry could not be resolved.", {
+          pack: pack.collection,
+          documentId
+        });
+        return ui.notifications.error("The selected creature could not be loaded from that compendium.");
+      }
+      if (source.documentName !== "Actor") {
+        console.error("[Tamer Companion Manager] Selected companion entry is not an Actor.", {
+          pack: pack.collection,
+          documentId,
+          documentName: source.documentName
+        });
+        return ui.notifications.error("The selected compendium entry is not an Actor.");
+      }
+
+      // Use Foundry's native WorldCollection importer with the resolved
+      // Actor. This follows the same compendium-cleaning rules as the
+      // normal Foundry import workflow.
+      actor = await game.actors.importDocument(source, { keepId: false });
+      if (!actor) {
+        return ui.notifications.error("The companion could not be imported into the World.");
+      }
+    } catch (error) {
+      console.error("[Tamer Companion Manager] Failed to import companion from compendium.", {
+        error,
+        pack: pack.collection,
+        documentId
+      });
+      return ui.notifications.error(
+        "The companion could not be imported from that compendium. See the browser console for details."
+      );
+    }
 
     try {
-      // Foundry v14 provides a dedicated ActorCollection convenience method
-      // for importing an Actor directly from a CompendiumCollection.
-      const actor = await game.actors.importFromCompendium(pack, documentId);
-      if (!actor) return ui.notifications.error("The companion could not be imported into the World.");
       await this.close();
-      await this.manager?._linkCompanion(actor);
+      const linked = await this.manager?._linkCompanion(actor);
+      if (linked === false) {
+        console.error("[Tamer Companion Manager] Imported companion could not be linked.", {
+          actor: actor.uuid,
+          name: actor.name
+        });
+        return ui.notifications.error(
+          "The creature was imported, but could not be bonded to this Tamer."
+        );
+      }
     } catch (error) {
-      console.error("[Tamer Companion Manager] Failed to import companion from compendium.", error);
-      ui.notifications.error("The companion could not be imported from that compendium. See the browser console for details.");
+      console.error("[Tamer Companion Manager] Imported companion could not be linked.", error);
+      ui.notifications.error(
+        "The creature was imported, but could not be bonded to this Tamer. See the console for details."
+      );
     }
   }
 }
