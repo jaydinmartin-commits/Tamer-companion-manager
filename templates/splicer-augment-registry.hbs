@@ -1,0 +1,35 @@
+<form id="tcm-splicer-augment-registry" class="tcm-splicer-augment-registry">
+  <header class="tcm-splicer-registry-header">
+    <p>Configure the Splicer augment definitions used by the Companion Manager. These defaults are based on the V1.9 Splicer augment list. Costs, repeat limits, level gates, and exclusive groups can be adjusted by the GM.</p>
+  </header>
+
+  <div class="tcm-splicer-registry-list">
+    {{#each augments}}
+      <section class="tcm-splicer-registry-row" data-id="{{id}}">
+        <div class="tcm-splicer-registry-row-head">
+          <strong>{{name}}</strong>
+          <span>{{id}}</span>
+        </div>
+        <div class="tcm-splicer-registry-grid">
+          <label>Name<input name="name" type="text" value="{{name}}"></label>
+          <label>Cost<input name="cost" type="number" min="0" step="1" value="{{cost}}"></label>
+          <label>Max Applications<input name="maxCount" type="number" min="1" step="1" value="{{maxCount}}"></label>
+          <label>2nd Application Level<input name="minLevelForSecond" type="number" min="0" step="1" value="{{minLevelForSecond}}"></label>
+          <label>Exclusive Group<input name="exclusiveGroup" type="text" value="{{exclusiveGroup}}"></label>
+        </div>
+        <label class="tcm-splicer-registry-description">Description<textarea name="description" rows="3">{{description}}</textarea></label>
+        <div class="tcm-splicer-registry-flags">
+          <label><input name="repeatable" type="checkbox" {{checked repeatable}}> Repeatable</label>
+          <label><input name="growth" type="checkbox" {{checked growth}}> Growth augment</label>
+        </div>
+      </section>
+    {{/each}}
+  </div>
+
+  <footer class="form-footer">
+    <button type="button" data-action="reset"><i class="fa-solid fa-rotate-left"></i> Reset V1.9 Defaults</button>
+    <span class="flex-spacer"></span>
+    <button type="button" data-action="cancel">Cancel</button>
+    <button type="button" data-action="save"><i class="fa-solid fa-save"></i> Save</button>
+  </footer>
+</form>
