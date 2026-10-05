@@ -61,8 +61,25 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
   static getImprovementRegistry() { return foundry.utils.deepClone(game.settings.get(MODULE_ID, "improvementTrees") ?? []); }
   static async findBespokeTree(actor) {
-    const name=String(actor?.name??"").trim().toLowerCase();
-    return name ? this.getImprovementRegistry().find(t=>String(t.matchName??"").trim().toLowerCase()===name) ?? null : null;
+    const trees = this.getImprovementRegistry();
+    const identifier = String(actor?.system?.identifier ?? "").trim().toLowerCase();
+    const name = String(actor?.name ?? "").trim().toLowerCase();
+
+    // Prefer the stable D&D5e Actor identifier so bespoke companions can be
+    // renamed without losing their improvement tree.
+    if (identifier) {
+      const byIdentifier = trees.find(tree =>
+        String(tree.matchIdentifier ?? "").trim().toLowerCase() === identifier
+      );
+      if (byIdentifier) return byIdentifier;
+    }
+
+    // Backward-compatible fallback for existing trees that only have a name.
+    return name
+      ? trees.find(tree =>
+          String(tree.matchName ?? "").trim().toLowerCase() === name
+        ) ?? null
+      : null;
   }
   static async resolveTreeItems(tree) { return this.resolveSources(tree?.sources ?? []); }
   static async getAvailableImprovements(actor,record) {
@@ -1255,14 +1272,19 @@ class TamerCompanionImprovementRegistry extends HandlebarsApplicationMixin(Appli
   static PARTS={main:{template:`modules/${MODULE_ID}/templates/improvement-registry.hbs`,root:true}};
   constructor(options={}){super(options);this.editing=null;}
   async _prepareContext(){return{trees:TamerCompanionManager.getImprovementRegistry(),standardSources:TamerCompanionManager.getStandardImprovementSources(),editing:this.editing};}
-  static async _onAddTree(){this.editing={id:foundry.utils.randomID(),name:"",matchName:"",sources:[]};await this.render({force:true});}
+  static async _onAddTree(){this.editing={id:foundry.utils.randomID(),name:"",matchName:"",matchIdentifier:"",sources:[]};await this.render({force:true});}
   static async _onEditTree(event,target){this.editing=TamerCompanionManager.getImprovementRegistry().find(t=>t.id===target.dataset.id)??null;if(this.editing)await this.render({force:true});}
   static async _onCancelEdit(){this.editing=null;await this.render({force:true});}
   static async _onSaveTree(event,target){
     if(!this.editing)return;
-    const form=target.closest("form"),name=String(form?.elements?.name?.value??"").trim(),matchName=String(form?.elements?.matchName?.value??"").trim();
-    if(!name||!matchName)return ui.notifications.warn("Enter both a tree name and an exact companion name.");
-    const trees=TamerCompanionManager.getImprovementRegistry(),tree={...this.editing,name,matchName,updatedAt:Date.now()};
+    const form=target.closest("form"),
+      name=String(form?.elements?.name?.value??"").trim(),
+      matchName=String(form?.elements?.matchName?.value??"").trim(),
+      matchIdentifier=String(form?.elements?.matchIdentifier?.value??"").trim();
+    if(!name)return ui.notifications.warn("Enter a tree name.");
+    if(!matchIdentifier && !matchName)return ui.notifications.warn("Enter either an Actor Identifier or an exact companion name.");
+    const trees=TamerCompanionManager.getImprovementRegistry(),
+      tree={...this.editing,name,matchName,matchIdentifier,updatedAt:Date.now()};
     const i=trees.findIndex(t=>t.id===tree.id);if(i>=0)trees[i]=tree;else trees.push(tree);
     await game.settings.set(MODULE_ID,"improvementTrees",trees);this.editing=null;await this.render({force:true});
   }
