@@ -1,83 +1,75 @@
 <section class="tcm-root">
-  <header class="tcm-header">
-    <div class="tcm-tamer">
-      <img src="{{tamer.img}}" alt="{{tamer.name}}" class="tcm-tamer-image">
-      <div>
-        <h2>{{tamer.name}}</h2>
-        <div class="tcm-subtitle">Tamer Level {{tamer.level}}</div>
-      </div>
-    </div>
-    <div class="tcm-family-summary">
-      <span class="tcm-summary-label">Pocket Family</span>
-      <strong>{{pocketFamily.occupied}} / {{pocketFamily.slots}}</strong>
-    </div>
-  </header>
-
   <div class="tcm-toolbar">
-    <button type="button" data-action="addCompanion"><i class="fa-solid fa-plus"></i><span>Add Companion</span></button>
-    <button type="button" data-action="refresh"><i class="fa-solid fa-rotate"></i><span>Refresh</span></button>
-    <button type="button" data-action="openTamer"><i class="fa-solid fa-user"></i><span>Tamer Sheet</span></button>
+    <div class="tcm-toolbar-left">
+      <div class="tcm-family-summary">
+        <span class="tcm-summary-label">Pocket Family</span>
+        <strong>{{pocketFamily.occupied}} / {{pocketFamily.slots}}</strong>
+      </div>
+      <button type="button" data-action="addCompanion"><i class="fa-solid fa-plus"></i><span>Add Companion</span></button>
+      <button type="button" data-action="refresh"><i class="fa-solid fa-rotate"></i><span>Refresh</span></button>
+    </div>
+    <div class="tcm-paradigm-display" aria-label="Training paradigm">
+      {{#if splicer.enabled}}<span title="Splicer"><i class="fa-solid fa-dna"></i> Splicer</span>{{/if}}
+    </div>
   </div>
 
-    <div class="tcm-companion-grid">
+  <div class="tcm-companion-grid">
     {{#each companions}}
       <article class="tcm-card {{#if summoned}}is-summoned{{/if}}">
-        {{#if vessel}}
-          <button type="button" class="tcm-vessel-clear" data-action="clearVessel" data-index="{{index}}" title="Unbind vessel" aria-label="Unbind vessel">
-            <i class="fa-solid fa-recycle" aria-hidden="true"></i>
-          </button>
-        {{/if}}
         <div class="tcm-card-image">
           <img src="{{img}}" alt="{{name}}">
           <span class="tcm-status {{#if summoned}}summoned{{else}}vessel{{/if}}">
             {{#if summoned}}Summoned{{else}}In Vessel{{/if}}
           </span>
         </div>
+
         <div class="tcm-card-body">
           <div class="tcm-card-heading">
-            <div>
+            <div class="tcm-card-identity">
               <h3>{{name}}</h3>
               <div class="tcm-type">{{type}}</div>
             </div>
-            <span class="tcm-slot">Slot {{slot}}</span>
+            <button type="button" class="tcm-improvement-button" data-action="trainCompanion" data-index="{{index}}" title="Choose Improvements" aria-label="Choose Improvements for {{name}}" {{#unless linked}}disabled{{/unless}} {{#unless progression.target}}disabled{{/unless}}>
+              <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i>
+              <span>{{progression.chosen}} / {{progression.target}}</span>
+            </button>
           </div>
 
           <div class="tcm-stats">
             <div><span>HP</span><strong>{{hp}} / {{hpMax}}</strong></div>
             <div><span>AC</span><strong>{{ac}}</strong></div>
-            <div class="tcm-vessel-field {{#unless vessel}}unavailable{{/unless}}"><span>Vessel</span>{{#if vessel}}<strong>{{vessel}}</strong>{{else}}<strong>No vessel assigned</strong>{{/if}}</div>
           </div>
 
-          {{#if splicer.enabled}}
-          <div class="tcm-improvements tcm-splicer-row">
-            <div><span>Splicer Augments</span><strong>{{splicer.spent}} pts{{#if splicer.pending}} · Pending{{/if}}</strong></div>
-            <button type="button" data-action="openSplicer" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}}>
-              <i class="fa-solid fa-dna"></i><span>Choose Augments</span>
-            </button>
-          </div>
-          {{/if}}
-
-          <div class="tcm-improvements">
-  <div><span>Improvements</span><strong>{{progression.chosen}} / {{progression.target}}</strong></div>
-  <button type="button" data-action="trainCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}} {{#if progression.target}}{{else}}disabled{{/if}}>
-    <i class="fa-solid fa-graduation-cap"></i><span>Choose Improvement</span>
-  </button>
-</div>
-
-          <div class="tcm-vessel-picker">
+          <div class="tcm-vessel-control {{#unless vessel}}is-unassigned{{/unless}}">
             <i class="fa-solid fa-box-open" aria-hidden="true"></i>
-            <select data-tcm-vessel data-index="{{index}}" title="Choose companion vessel">
-              <option value="">No vessel assigned</option>
+            <span class="tcm-vessel-label">Vessel</span>
+            <select data-tcm-vessel data-index="{{index}}" title="{{#if vessel}}Replace vessel{{else}}Assign vessel{{/if}}">
+              <option value="">{{#if vessel}}Unassign{{else}}Assign Vessel{{/if}}</option>
               {{#each vessels}}
                 <option value="{{uuid}}" {{#if selected}}selected{{/if}}>{{name}}{{#if equipped}} — Equipped{{/if}}</option>
               {{/each}}
             </select>
+            {{#if vessel}}
+              <button type="button" class="tcm-vessel-clear" data-action="clearVessel" data-index="{{index}}" title="Unbind vessel" aria-label="Unbind vessel">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+              </button>
+            {{/if}}
           </div>
+
+          {{#if splicer.enabled}}
+            <div class="tcm-paradigm-row">
+              <span><i class="fa-solid fa-dna" aria-hidden="true"></i> Splicer Augments</span>
+              <strong>{{splicer.spent}} pts{{#if splicer.pending}} · Pending{{/if}}</strong>
+              <button type="button" data-action="openSplicer" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}}>
+                Choose
+              </button>
+            </div>
+          {{/if}}
+
           <div class="tcm-actions">
             <button type="button" data-action="openCompanion" data-index="{{index}}" {{#unless linked}}disabled{{/unless}}>
               <i class="fa-solid fa-file-lines"></i><span>Manage</span>
             </button>
-
             {{#if summoned}}
               <button type="button" data-action="dismissCompanion" data-index="{{index}}" class="primary">
                 <i class="fa-solid fa-box"></i><span>Dismiss</span>
@@ -87,8 +79,7 @@
                 <i class="fa-solid fa-wand-sparkles"></i><span>Summon</span>
               </button>
             {{/if}}
-
-            <button type="button" data-action="unlinkCompanion" data-index="{{index}}" title="Unlink">
+            <button type="button" data-action="unlinkCompanion" data-index="{{index}}" title="Unlink" aria-label="Unlink companion">
               <i class="fa-solid fa-link-slash"></i>
             </button>
           </div>
@@ -112,18 +103,4 @@
       </div>
     {{/unless}}
   </div>
-
-  <div class="tcm-bottom-info">
-    <div class="tcm-soul-bond">
-      <div class="tcm-soul-bond-heading">
-        <span><i class="fa-solid fa-heart-pulse"></i><strong>Soul Bond</strong></span>
-        <strong>{{soulBond.current}} / {{soulBond.max}}</strong>
-      </div>
-    </div>
-  </div>
-
-  <footer class="tcm-footer">
-    <span><i class="fa-solid fa-database"></i> Relationship data is stored on the Tamer Actor.</span>
-    <span>v0.1.71</span>
-  </footer>
 </section>
