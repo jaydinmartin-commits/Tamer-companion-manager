@@ -97,9 +97,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     // etc. can never appear in the vessel selector.
     const allowedTypes = new Set([
       "equipment",
+      "weapon",
       "consumable",
       "tool",
-      "loot"
+      "loot",
+      "container"
     ]);
 
     return allowedTypes.has(String(item.type ?? "").toLowerCase());
