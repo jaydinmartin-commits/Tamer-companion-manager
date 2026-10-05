@@ -82,3 +82,5 @@ Packaging trigger for v0.1.31.
 Progression hardening release: corrected ASI-level Hit Die tracking, improved prerequisite resolution, preserved selected improvements through filtering changes, and hardened advancement completion handling.
 
 <!-- v0.1.56 release-package trigger -->
+
+<!-- v0.1.57 release-package trigger -->
