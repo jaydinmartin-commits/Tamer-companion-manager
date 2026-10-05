@@ -1340,10 +1340,22 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
   async _linkCompanion(actor) {
     const records=TamerCompanionManager.records(this.tamer), max=TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
-    if(records.length>=max)return ui.notifications.warn("No Pocket Family slot is available.");
-    if(actor.id===this.tamer.id||actor.uuid===this.tamer.uuid)return ui.notifications.warn("The Tamer cannot be linked as their own companion.");
-    if(!(actor.isOwner||game.user.isGM))return ui.notifications.warn("You do not have permission to use that Actor as a companion.");
-    if(records.some(r=>r.actorUuid===actor.uuid))return ui.notifications.warn(`${actor.name} is already linked to this Tamer.`);
+    if(records.length>=max){
+      console.warn("[Tamer Companion Manager] Companion link rejected: Pocket Family is full.", { records: records.length, max, tamer: this.tamer?.uuid });
+      return ui.notifications.warn("No Pocket Family slot is available.");
+    }
+    if(actor.id===this.tamer.id||actor.uuid===this.tamer.uuid){
+      console.warn("[Tamer Companion Manager] Companion link rejected: Actor is the Tamer.", { actor: actor.uuid, tamer: this.tamer.uuid });
+      return ui.notifications.warn("The Tamer cannot be linked as their own companion.");
+    }
+    if(!(actor.isOwner||game.user.isGM)){
+      console.warn("[Tamer Companion Manager] Companion link rejected: insufficient Actor ownership.", { actor: actor.uuid, isOwner: actor.isOwner, user: game.user?.id });
+      return ui.notifications.warn("You do not have permission to use that Actor as a companion.");
+    }
+    if(records.some(r=>r.actorUuid===actor.uuid)){
+      console.warn("[Tamer Companion Manager] Companion link rejected: Actor already linked.", { actor: actor.uuid, tamer: this.tamer.uuid });
+      return ui.notifications.warn(`${actor.name} is already linked to this Tamer.`);
+    }
 
     const tree=await TamerCompanionManager.findBespokeTree(actor);
     const record={id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0,hitDiceApplied:0,hitDiceChoices:{}};
@@ -1362,8 +1374,12 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         delete data._id;
         const added=await TamerCompanionManager.addImprovementItem(actor,data,source.uuid);
         if(!added){
-          ui.notifications.error(`Could not grant automatic improvement "${source.name}" to ${actor.name}.`);
-          return false;
+          // A bespoke improvement is supplemental to the bond. Never allow
+          // failure to add one optional improvement to discard the companion
+          // record itself.
+          console.warn("[Tamer Companion Manager] Could not grant automatic bespoke improvement; continuing with bond.", { actor: actor.uuid, improvement: source.name, source: source.uuid });
+          ui.notifications.warn(`${actor.name} was bonded, but the automatic improvement "${source.name}" could not be added.`);
+          continue;
         }
         record.improvements.push({
           itemUuid:added.uuid,
