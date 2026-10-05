@@ -84,3 +84,5 @@ Progression hardening release: corrected ASI-level Hit Die tracking, improved pr
 <!-- v0.1.56 release-package trigger -->
 
 <!-- v0.1.57 release-package trigger -->
+
+<!-- v0.1.58 release-package trigger -->
