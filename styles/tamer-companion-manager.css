@@ -502,3 +502,15 @@
   #tamer-companion-manager .tcm-card-body{padding:7px}
   #tamer-companion-manager .tcm-toolbar button span{font-size:.72rem}
 }
+
+
+/* v0.1.72 image containment correction */
+#tamer-companion-manager .tcm-card{display:flex!important;align-items:stretch!important;position:relative;overflow:hidden!important}
+#tamer-companion-manager .tcm-card-image{position:relative!important;flex:0 0 28%!important;width:28%!important;min-width:70px!important;min-height:0!important;height:auto!important;aspect-ratio:3/4!important;overflow:hidden!important;align-self:stretch!important}
+#tamer-companion-manager .tcm-card-image img{position:absolute!important;inset:0!important;display:block!important;width:100%!important;height:100%!important;min-width:0!important;min-height:0!important;max-width:100%!important;max-height:100%!important;object-fit:cover!important;object-position:center center!important}
+#tamer-companion-manager .tcm-card-body{flex:1 1 72%!important;width:auto!important;min-width:0!important;max-width:72%!important;overflow:hidden!important}
+#tamer-companion-manager .tcm-status{z-index:2}
+@media (max-width:760px){
+  #tamer-companion-manager .tcm-card-image{flex-basis:24%!important;width:24%!important}
+  #tamer-companion-manager .tcm-card-body{max-width:76%!important}
+}
