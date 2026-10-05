@@ -50,7 +50,7 @@
   </button>
 </div>
 
-          <div class="tcm-vessel-drop-zone" data-index="{{index}}" title="Drag a vessel Item from the Tamer sheet here"><i class="fa-solid fa-box-open"></i><span>{{#if vessel}}Replace Vessel{{else}}Assign Vessel{{/if}}</span><small>Drag the vessel Item here</small></div>
+          <div class="tcm-vessel-drop-zone {{#if vessel}}has-vessel{{/if}}" data-index="{{index}}" title="{{#if vessel}}Drag another Item here to replace {{vessel}}{{else}}Drag a vessel Item here{{/if}}"><img class="tcm-vessel-icon" src="{{#if vessel}}{{vesselImg}}{{else}}icons/svg/item-bag.svg{{/if}}" alt=""><span>{{#if vessel}}Replace Vessel{{else}}Drop Item Here{{/if}}</span></div>
           <div class="tcm-actions">
             <button type="button" data-action="openCompanion" data-index="{{index}}" {{#unless linked}}disabled{{/unless}}>
               <i class="fa-solid fa-file-lines"></i><span>Manage</span>
@@ -108,6 +108,6 @@
 
   <footer class="tcm-footer">
     <span><i class="fa-solid fa-database"></i> Relationship data is stored on the Tamer Actor.</span>
-    <span>v0.1.67</span>
+    <span>v0.1.70</span>
   </footer>
 </section>
