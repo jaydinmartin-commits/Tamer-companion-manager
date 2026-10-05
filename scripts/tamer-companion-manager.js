@@ -515,6 +515,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const manager = AdvancementManager.forNewItem(actor, data);
+    if (manager) this._internalAdvancementManagers.add(manager);
     if (!manager?.steps?.length) {
       const created = await actor.createEmbeddedDocuments("Item", [data]);
       if (created?.[0]) await this.refreshActorSheets(actor);
@@ -575,6 +576,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const manager = AdvancementManager.forDeletedItem(actor, item.id);
+    if (manager) this._internalAdvancementManagers.add(manager);
     if (!manager?.steps?.length) {
       await item.delete();
       await this.refreshActorSheets(actor);
@@ -844,6 +846,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static _improvementSyncLocks = new Map();
+  static _internalAdvancementManagers = new WeakSet();
   // When a level-down removes higher-level improvements, Foundry may fire
   // several advancement hooks for the same final level. Remember that this
   // level was reached by rollback so duplicate hooks cannot reopen the picker.
@@ -1525,6 +1528,7 @@ Hooks.once("init", () => {
 
   // Final fallback: the complete advancement flow has finished.
   Hooks.on("dnd5e.advancementManagerComplete", async manager => {
+    if (manager && TamerCompanionManager._internalAdvancementManagers.has(manager)) return;
     await syncTamerCompanionAdvancement(manager?.actor);
   });
   Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
