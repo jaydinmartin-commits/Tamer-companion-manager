@@ -171,13 +171,9 @@ class TamerCompanionSheetTab {
       link.setAttribute("aria-selected", link === tab ? "true" : "false");
     }
 
-    for (const section of body.querySelectorAll(".tab[data-tab]")) {
-      section.classList.remove("active");
-      section.hidden = true;
-      section.style.removeProperty("display");
-      section.style.removeProperty("pointer-events");
-    }
-
+    // Do not toggle native tab bodies here. ApplicationV2 owns their
+    // visibility. The companion-active class lets CSS temporarily replace
+    // the native content without corrupting ApplicationV2's tab state.
     root.classList.add("tcm-companions-active");
     tab.classList.add("active");
     tab.setAttribute("aria-selected", "true");
