@@ -590,3 +590,9 @@
 .tcm-companions-active [data-container-id="ability-scores"],
 .tcm-companions-active .ability-scores,
 .tcm-companions-active .abilities{display:none!important}
+
+/* Companion tab temporarily replaces the native tab body without mutating
+   ApplicationV2's own tab state. This prevents the native tab controller
+   from requiring a second click after leaving Companion Manager. */
+.tcm-companions-active [data-container-id="tabs"] > .tab[data-tab]{display:none!important}
+.tcm-companions-active [data-container-id="tabs"] > .tcm-sheet-tab-content[data-tcm-tab="tcm-companions"]{display:flex!important}
