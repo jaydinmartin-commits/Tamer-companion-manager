@@ -627,34 +627,130 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       ui.notifications.error("Foundry's DialogV2 API is unavailable; the companion Hit Die could not be applied.");
       return null;
     }
+
     const die = this.getCompanionHitDie(actor);
     const average = Math.floor(die / 2) + 1;
     const con = this.getCompanionConstitutionModifier(actor);
+    const previousHP = Number(actor.system?.attributes?.hp?.max ?? actor.system?.attributes?.hp?.value ?? 0);
     const averageGain = Math.max(average + con, 1);
-    const content = `
-      <p><strong>${actor.name}</strong> gains a bonus Hit Die from your Tamer training at Tamer level ${level}.</p>
-      <p>Choose how to determine the Hit Die's HP gain. Your Constitution modifier (${con >= 0 ? "+" : ""}${con}) is added afterward, with a minimum gain of 1 HP.</p>
-      <p><strong>Hit Die:</strong> d${die} &nbsp; <strong>Average:</strong> ${average} &nbsp; <strong>Average + CON:</strong> ${averageGain}</p>
-      ${total > 1 ? `<p><small>Bonus Hit Die ${index} of ${total} for this training update.</small></p>` : ""}
-    `;
-    const result = await DialogV2.wait({
-      window: { title: `Companion Hit Points — ${actor.name}` },
-      content, modal: true, rejectClose: false,
-      buttons: [
-        { action: "average", label: "Take Average", icon: "fa-solid fa-calculator", default: defaultAverage },
-        { action: "roll", label: `Roll d${die}`, icon: "fa-solid fa-dice-d20", default: !defaultAverage,
-          callback: async () => {
-            const roll = await new Roll(`1d${die}`).evaluate({async: true});
-            return {mode: "roll", die, raw: Number(roll.total)};
-          }
-        }
-      ]
-    });
-    if (result === null) return null;
-    if (result === "average") return {mode: "avg", die, raw: average};
-    return result?.mode === "roll" ? result : null;
-  }
+    const averageFinal = previousHP + averageGain;
+    const stepText = total > 1 ? `Step ${index} of ${total}` : "Step 1 of 1";
+    const initialChoice = defaultAverage ? "average" : "roll";
 
+    const content = `
+      <section class="tcm-hp-advancement">
+        <header class="tcm-hp-advancement-header">
+          <div class="tcm-hp-advancement-class">Tamer • Level ${level} • ${stepText}</div>
+        </header>
+
+        <div class="tcm-hp-advancement-section">
+          <h2>Hit Points</h2>
+          <div class="tcm-hp-advancement-rule"></div>
+          <div class="tcm-hp-advancement-summary">
+            <div><span>PREV.</span><strong data-tcm-hp-prev>${previousHP}</strong></div>
+            <b>+</b>
+            <div><span data-tcm-hp-method-label>AVG.</span><strong data-tcm-hp-gain>${averageGain}</strong></div>
+            <b>=</b>
+            <div><span>FINAL</span><strong data-tcm-hp-final>${averageFinal}</strong></div>
+          </div>
+        </div>
+
+        <fieldset class="tcm-hp-advancement-options">
+          <legend>OPTIONS</legend>
+
+          <label class="tcm-hp-option ${initialChoice === "average" ? "is-selected" : ""}">
+            <input type="radio" name="hitPointMethod" value="average" ${initialChoice === "average" ? "checked" : ""}>
+            <span>Take Average</span>
+            <strong>+${averageGain}</strong>
+            <i class="fa-solid fa-check"></i>
+          </label>
+
+          <label class="tcm-hp-option ${initialChoice === "roll" ? "is-selected" : ""}">
+            <input type="radio" name="hitPointMethod" value="roll" ${initialChoice === "roll" ? "checked" : ""}>
+            <span>Roll d${die}</span>
+            <strong data-tcm-roll-result>${initialChoice === "roll" ? "Roll to determine" : ""}</strong>
+            <i class="fa-solid fa-dice-d20"></i>
+          </label>
+
+          <p class="tcm-hp-advancement-note">${actor.name} gains this Hit Die from Tamer training. Constitution modifier: ${con >= 0 ? "+" : ""}${con}.</p>
+        </fieldset>
+      </section>
+    `;
+
+    let rolledValue = null;
+
+    const result = await DialogV2.wait({
+      window: { title: "Advancement" },
+      classes: ["tcm-hp-advancement-dialog"],
+      position: { width: 640, height: 500 },
+      content,
+      modal: true,
+      rejectClose: false,
+      buttons: [{
+        action: "next",
+        label: "NEXT",
+        icon: "fa-solid fa-angles-right",
+        default: true,
+        class: "tcm-hp-next",
+        callback: async (event, button, dialog) => {
+          const choice = dialog.element?.querySelector("input[name='hitPointMethod']:checked")?.value ?? "average";
+          if (choice === "average") return {mode: "avg", die, raw: average};
+
+          if (rolledValue === null) {
+            const roll = await new Roll(`1d${die}`).evaluate({async: true});
+            rolledValue = Number(roll.total);
+          }
+          return {mode: "roll", die, raw: rolledValue};
+        }
+      }],
+      render: (_event, dialog) => {
+        const root = dialog.element?.querySelector(".tcm-hp-advancement");
+        if (!root) return;
+
+        const updatePreview = async () => {
+          const choice = root.querySelector("input[name='hitPointMethod']:checked")?.value ?? "average";
+          const gainEl = root.querySelector("[data-tcm-hp-gain]");
+          const finalEl = root.querySelector("[data-tcm-hp-final]");
+          const methodEl = root.querySelector("[data-tcm-hp-method-label]");
+          const rollEl = root.querySelector("[data-tcm-roll-result]");
+
+          root.querySelectorAll(".tcm-hp-option").forEach(option => {
+            option.classList.toggle("is-selected", option.querySelector("input")?.checked === true);
+          });
+
+          if (choice === "average") {
+            const gain = averageGain;
+            gainEl.textContent = gain;
+            finalEl.textContent = averageFinal;
+            methodEl.textContent = "AVG.";
+            rollEl.textContent = "";
+            rolledValue = null;
+            return;
+          }
+
+          if (rolledValue === null) {
+            const roll = await new Roll(`1d${die}`).evaluate({async: true});
+            rolledValue = Number(roll.total);
+          }
+
+          const gain = Math.max(rolledValue + con, 1);
+          gainEl.textContent = gain;
+          finalEl.textContent = previousHP + gain;
+          methodEl.textContent = "ROLL.";
+          rollEl.textContent = `+${gain}`;
+        };
+
+        root.querySelectorAll("input[name='hitPointMethod']").forEach(input => {
+          input.addEventListener("change", () => updatePreview());
+        });
+
+        if (initialChoice === "roll") updatePreview();
+      }
+    });
+
+    if (result === null) return null;
+    return result?.mode === "roll" || result?.mode === "avg" ? result : null;
+  }
   static async applyCompanionHitDice(tamer, record, actor, targetCount, level) {
     const applied = this.getAppliedHitDice(record);
     const pending = Math.max(0, Number(targetCount) - applied);
