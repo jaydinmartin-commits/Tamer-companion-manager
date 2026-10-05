@@ -780,9 +780,15 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     return true;
   }
 
+  static _hitDieSyncLocks = new Map();
+
   static async syncCompanionHitDice(tamer, {notify = true} = {}) {
     if (!tamer || !this.isTamer(tamer)) return false;
-    const level = this.getTamerLevel(tamer), records = this.records(tamer);
+    const lockKey = tamer.uuid ?? tamer.id;
+    if (this._hitDieSyncLocks.has(lockKey)) return this._hitDieSyncLocks.get(lockKey);
+
+    const operation = (async () => {
+      const level = this.getTamerLevel(tamer), records = this.records(tamer);
     let changed = false;
     for (const record of records) {
       const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
@@ -795,8 +801,16 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       changed = true;
       if (notify) ui.notifications.info(`${actor.name} received ${target - before} bonus Hit Die${target - before === 1 ? "" : "s"}.`);
     }
-    if (changed) await this.save(tamer, records);
-    return changed;
+      if (changed) await this.save(tamer, records);
+      return changed;
+    })();
+
+    this._hitDieSyncLocks.set(lockKey, operation);
+    try {
+      return await operation;
+    } finally {
+      this._hitDieSyncLocks.delete(lockKey);
+    }
   }
 
   static getSoulBondFeature(tamer) {
@@ -1246,8 +1260,7 @@ Hooks.once("init", () => {
   const addCompanionControl = (app, controls) => { const actor = app?.actor; if (!actor || !TamerCompanionManager.isTamer(actor)) return; if (controls.some(c => c.action === "tamer-companion-manager")) return; controls.unshift({ action: "tamer-companion-manager", label: "Companions", icon: "fa-solid fa-paw", ownership: "OWNER", onClick: () => TamerCompanionManager.open(actor) }); };
   Hooks.on("getHeaderControlsApplicationV2", addCompanionControl);
   Hooks.on("getHeaderControlsActorSheetV2", addCompanionControl);
-  Hooks.on("dnd5e.advancementManagerComplete", async manager => {
-    const actor = manager?.actor;
+  const syncTamerCompanionHitDice = async actor => {
     if (!actor || !TamerCompanionManager.isTamer(actor)) return;
     if (!(actor.isOwner || game.user.isGM)) return;
     try {
@@ -1258,8 +1271,20 @@ Hooks.once("init", () => {
       }
     } catch (error) {
       console.error("[Tamer Companion Manager] Companion Hit Die synchronization failed.", error);
-      ui.notifications.error("Companion Hit Dice could not be synchronized. See the console for details.");
+      ui.notifications.error("Companion Hit Dice could not be synchronized. See the browser console for details.");
     }
+  };
+
+  Hooks.on("updateItem", async (item, changes, options) => {
+    if (!options?.isAdvancement || item?.type !== "class") return;
+    const actor = item.parent;
+    if (!actor || !TamerCompanionManager.isTamer(actor)) return;
+    if (!Object.hasOwn(changes?.system ?? {}, "levels")) return;
+    await syncTamerCompanionHitDice(actor);
+  });
+
+  Hooks.on("dnd5e.advancementManagerComplete", async manager => {
+    await syncTamerCompanionHitDice(manager?.actor);
   });
   Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
     if (config?.type !== "short" || !TamerCompanionManager.isTamer(actor)) return;
