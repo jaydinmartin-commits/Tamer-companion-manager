@@ -76,3 +76,7 @@ Packaging trigger for v0.1.31.
 - GM-only Configure Companion Sources menu controls which Actor compendiums are available.
 - Selected compendium creatures are imported into the World and bonded through the existing companion-linking flow.
 - Existing Actor drag-and-drop companion linking remains available.
+
+
+### v0.1.55
+Progression hardening release: corrected ASI-level Hit Die tracking, improved prerequisite resolution, preserved selected improvements through filtering changes, and hardened advancement completion handling.
