@@ -1,4 +1,4 @@
-<section class="tcm-root">
+<section class="tcm-root tcm-embedded-ready">
   <header class="tcm-header">
     <div class="tcm-tamer">
       <img src="{{tamer.img}}" alt="{{tamer.name}}" class="tcm-tamer-image">
@@ -14,9 +14,9 @@
   </header>
 
   <div class="tcm-toolbar">
-    <button type="button" data-action="addCompanion"><i class="fa-solid fa-plus"></i><span>Add Companion</span></button>
-    <button type="button" data-action="refresh"><i class="fa-solid fa-rotate"></i><span>Refresh</span></button>
-    <button type="button" data-action="openTamer"><i class="fa-solid fa-user"></i><span>Tamer Sheet</span></button>
+    <button type="button" data-tcm-action="addCompanion"><i class="fa-solid fa-plus"></i><span>Add Companion</span></button>
+    <button type="button" data-tcm-action="refresh"><i class="fa-solid fa-rotate"></i><span>Refresh</span></button>
+    <button type="button" data-tcm-action="openTamer"><i class="fa-solid fa-user"></i><span>Tamer Sheet</span></button>
   </div>
 
     <div class="tcm-companion-grid">
@@ -45,29 +45,29 @@
 
           <div class="tcm-improvements">
   <div><span>Improvements</span><strong>{{progression.chosen}} / {{progression.target}}</strong></div>
-  <button type="button" data-action="trainCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}} {{#if progression.target}}{{else}}disabled{{/if}}>
+  <button type="button" data-tcm-action="trainCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}} {{#if progression.target}}{{else}}disabled{{/if}}>
     <i class="fa-solid fa-graduation-cap"></i><span>Choose Improvement</span>
   </button>
 </div>
 
-          {{#if vessel}}<div class="tcm-vessel-drop-zone has-vessel" data-index="{{index}}" title="Drag another Item here to replace {{vessel}}"><img class="tcm-vessel-icon" src="{{vesselImg}}" alt="{{vessel}}"><button type="button" class="tcm-vessel-replace" data-action="clearVessel" data-index="{{index}}" title="Replace Vessel"><i class="fa-solid fa-rotate"></i></button></div>{{else}}<div class="tcm-vessel-drop-zone" data-index="{{index}}" title="Drag a vessel Item here"><i class="fa-solid fa-box-open tcm-vessel-placeholder"></i></div>{{/if}}
+          {{#if vessel}}<div class="tcm-vessel-drop-zone has-vessel" data-index="{{index}}" title="Drag another Item here to replace {{vessel}}"><img class="tcm-vessel-icon" src="{{vesselImg}}" alt="{{vessel}}"><button type="button" class="tcm-vessel-replace" data-tcm-action="clearVessel" data-index="{{index}}" title="Replace Vessel"><i class="fa-solid fa-rotate"></i></button></div>{{else}}<div class="tcm-vessel-drop-zone" data-index="{{index}}" title="Drag a vessel Item here"><i class="fa-solid fa-box-open tcm-vessel-placeholder"></i></div>{{/if}}
           <div class="tcm-actions">
-            <button type="button" data-action="openCompanion" data-index="{{index}}" {{#unless linked}}disabled{{/unless}}>
+            <button type="button" data-tcm-action="openCompanion" data-index="{{index}}" {{#unless linked}}disabled{{/unless}}>
               <i class="fa-solid fa-file-lines"></i><span>Manage</span>
             </button>
 
             {{#if summoned}}
-              <button type="button" data-action="dismissCompanion" data-index="{{index}}" class="primary">
+              <button type="button" data-tcm-action="dismissCompanion" data-index="{{index}}" class="primary">
                 <i class="fa-solid fa-box"></i><span>Dismiss</span>
               </button>
             {{else}}
-              <button type="button" data-action="summonCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}}>
+              <button type="button" data-tcm-action="summonCompanion" data-index="{{index}}" class="primary" {{#unless linked}}disabled{{/unless}}>
                 <i class="fa-solid fa-wand-sparkles"></i><span>Summon</span>
               </button>
             {{/if}}
 
-            {{#if vessel}}<button type="button" data-action="clearVessel" data-index="{{index}}" title="Remove vessel assignment"><i class="fa-solid fa-box"></i></button>{{/if}}
-            <button type="button" data-action="unlinkCompanion" data-index="{{index}}" title="Unlink">
+            {{#if vessel}}<button type="button" data-tcm-action="clearVessel" data-index="{{index}}" title="Remove vessel assignment"><i class="fa-solid fa-box"></i></button>{{/if}}
+            <button type="button" data-tcm-action="unlinkCompanion" data-index="{{index}}" title="Unlink">
               <i class="fa-solid fa-link-slash"></i>
             </button>
           </div>
@@ -92,17 +92,5 @@
     {{/unless}}
   </div>
 
-  <div class="tcm-bottom-info">
-    <div class="tcm-soul-bond">
-      <div class="tcm-soul-bond-heading">
-        <span><i class="fa-solid fa-heart-pulse"></i><strong>Soul Bond</strong></span>
-        <strong>{{soulBond.current}} / {{soulBond.max}}</strong>
-      </div>
-    </div>
-  </div>
 
-  <footer class="tcm-footer">
-    <span><i class="fa-solid fa-database"></i> Relationship data is stored on the Tamer Actor.</span>
-    <span>v0.1.71</span>
-  </footer>
 </section>
