@@ -282,6 +282,10 @@ class TamerCompanionSheetTab {
           const token = await fromUuid(record.tokenUuid).catch(() => null);
           if (token) await token.delete();
         }
+        const companion = await TamerCompanionManager.resolveCompanionActor(record);
+        if (companion?.getFlag(MODULE_ID, "companionLink")?.tamerUuid === controller.tamer.uuid) {
+          await companion.unsetFlag(MODULE_ID, "companionLink");
+        }
         records.splice(index, 1);
         await TamerCompanionManager.save(controller.tamer, records);
         return this.render(controller);
