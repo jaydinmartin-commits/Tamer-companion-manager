@@ -1,6 +1,7 @@
-const MODULE_ID = "tamer-companion-manager";
+import { HandlebarsApplicationMixin, ApplicationV2 } from foundry.applications.api;
+import { TamerRecords } from "./data/tamer-records.js";
 
-const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const MODULE_ID = "tamer-companion-manager";
 
 export class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
@@ -22,10 +23,22 @@ export class TamerCompanionManager extends HandlebarsApplicationMixin(Applicatio
     }
   };
 
+  constructor(options = {}) {
+    super(options);
+    this.tamer = null;
+  }
+
+  setTamer(actor) {
+    this.tamer = actor;
+    return this;
+  }
+
   async _prepareContext() {
+    const companions = this.tamer ? TamerRecords.read(this.tamer) : [];
     return {
       moduleId: MODULE_ID,
-      companions: []
+      tamer: this.tamer,
+      companions
     };
   }
 }
