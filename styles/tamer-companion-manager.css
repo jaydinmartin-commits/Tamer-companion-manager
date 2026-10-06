@@ -1705,3 +1705,22 @@
   text-transform:uppercase;
   letter-spacing:.04em;
 }
+
+
+.tcm-companion-repeatable-select {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+
+.tcm-companion-repeatable-select > span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tcm-companion-repeatable-select select {
+  width: 100%;
+  min-height: 2rem;
+}
