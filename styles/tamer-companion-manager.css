@@ -1591,3 +1591,37 @@
   outline:1px solid var(--tcm-native-gold);
   outline-offset:1px;
 }
+
+
+.tcm-improvements-summary{
+  margin:7px 0 0;
+  border-top:1px solid var(--tcm-native-soft);
+}
+.tcm-improvements-summary summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:5px 2px;
+  cursor:pointer;
+  list-style:none;
+  color:var(--tcm-native-muted);
+  font-size:.62rem;
+}
+.tcm-improvements-summary summary::-webkit-details-marker{display:none}
+.tcm-improvements-summary summary i{color:var(--tcm-native-gold);margin-right:4px}
+.tcm-improvements-summary summary strong{font-size:.59rem;color:var(--tcm-native-gold)}
+.tcm-improvements-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:3px 5px;
+  padding:2px 0 6px;
+}
+.tcm-improvement-summary-row{
+  padding:2px 6px;
+  border:1px solid var(--tcm-native-soft);
+  border-radius:3px;
+  color:var(--tcm-native-muted);
+  background:rgba(0,0,0,.08);
+  font-size:.58rem;
+}
