@@ -403,5 +403,5 @@ class TamerCompanionSheetTab {
 }
 
 Hooks.once("init", () => {
-  Hooks.on("renderActorSheetV2", (app, element) => TamerCompanionSheetTab.attach(app, element));
+  Hooks.on("renderCharacterActorSheet", (app, element) => TamerCompanionSheetTab.attach(app, element));
 });
