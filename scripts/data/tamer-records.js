@@ -21,12 +21,43 @@ export class TamerRecords {
 
   static async write(actor, companions) {
     if (!actor?.setFlag || !this.isTamer(actor)) return false;
-
     const normalized = companions
       .map(CompanionRecord.normalize)
       .filter(Boolean);
+    await actor.setFlag(MODULE_ID, FLAG_KEY, normalized);
+    return true;
+  }
 
-    await actor.setFlag(MODULE_ID, FLAG_KEY, { companions: normalized });
+  static async add(actor, companion) {
+    if (!this.isTamer(actor) || !companion) return null;
+
+    const records = this.read(actor);
+    const actorUuid = companion.uuid ?? null;
+    if (!actorUuid) return null;
+
+    const existing = records.find(record => record.actorUuid === actorUuid);
+    if (existing) return existing;
+
+    const id = foundry.utils.randomID();
+    const record = CompanionRecord.create({
+      id,
+      name: companion.name ?? "Companion",
+      actorUuid
+    });
+
+    records.push(record);
+    await this.write(actor, records);
+    return record;
+  }
+
+  static async remove(actor, recordId) {
+    if (!this.isTamer(actor)) return false;
+
+    const records = this.read(actor);
+    const filtered = records.filter(record => String(record.id) !== String(recordId));
+    if (filtered.length === records.length) return false;
+
+    await this.write(actor, filtered);
     return true;
   }
 }
