@@ -77,9 +77,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     // resolved them again while building the card context. On a normal manager
     // render that meant multiple asynchronous UUID lookups per companion.
     const resolved = await Promise.all(records.map(async record => {
-      const actor = record?.actorUuid
-        ? await fromUuid(record.actorUuid).catch(() => null)
-        : null;
+      const actor = await TamerCompanionManager.resolveCompanionActor(record);
       const token = record?.tokenUuid
         ? await fromUuid(record.tokenUuid).catch(() => null)
         : null;
@@ -157,6 +155,20 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static records(actor) { return foundry.utils.deepClone(actor.getFlag(MODULE_ID, FLAG_KEY) ?? []); }
+
+  static async resolveCompanionActor(record) {
+    if (!record) return null;
+    if (record.actorUuid) {
+      const actor = await fromUuid(record.actorUuid).catch(() => null);
+      if (actor?.documentName === "Actor") return actor;
+    }
+    if (record.actorId) {
+      const actor = game.actors?.get(record.actorId) ?? null;
+      if (actor?.documentName === "Actor") return actor;
+    }
+    return null;
+  }
+
   static isValidVesselItem(item) {
     if (!item || item.documentName !== "Item") return false;
 
@@ -1642,7 +1654,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const tree=await TamerCompanionManager.findBespokeTree(actor);
     const baseHitDieFormula=TamerCompanionManager.getCompanionHitDieFormula(actor);
-    const record={id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0,hitDiceApplied:0,hitDiceChoices:{},hitDiceBaseCount:baseHitDieFormula.count,hitDiceBaseDenomination:baseHitDieFormula.denomination};
+    const record={id:foundry.utils.randomID(),actorId:actor.id,actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0,hitDiceApplied:0,hitDiceChoices:{},hitDiceBaseCount:baseHitDieFormula.count,hitDiceBaseDenomination:baseHitDieFormula.denomination};
 
     // Bespoke improvements with "become a tamer's companion" as their
     // prerequisite are granted automatically when the creature is tamed.
@@ -1686,7 +1698,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     await TamerCompanionManager.save(this.tamer,records);
     await TamerCompanionManager.syncCompanionNativeStats(this.tamer);
     ui.notifications.info(tree?`${actor.name} has been bonded with ${tree.name} improvements available.`:`${actor.name} has been bonded as a companion.`);
-    await this.render({force:true}); return true;
+    await this.render({force:true});
+    if (this._tcmRefresh) await this._tcmRefresh();
+    return true;
   }
 
   async _onFirstRender(context, options) {
@@ -1737,7 +1751,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const browser = new TamerCompanionBrowser({ tamer: this.tamer, manager: this });
     await browser.render({ force: true });
   }
-  static async _onOpenCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)], actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; actor?.sheet?.render({ force: true }); }
+  static async _onOpenCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)], actor = await TamerCompanionManager.resolveCompanionActor(record); actor?.sheet?.render({ force: true }); }
 
   static async _onSummonCompanion(event, target) {
     const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)];
@@ -1987,11 +2001,19 @@ class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
       const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
       if (records.length >= max) return ui.notifications.warn("No Pocket Family slot is available.");
       if (records.some(record => record.actorUuid === source.uuid)) return ui.notifications.warn(source.name + " is already linked to this Tamer.");
-      const actor = await game.actors.importDocument(source, { keepId: false });
-      if (!actor) return ui.notifications.error("The companion could not be imported into the World.");
+      const imported = await game.actors.importDocument(source, { keepId: false });
+      if (!imported?.id) return ui.notifications.error("The companion could not be imported into the World.");
+
+      const actor = game.actors.get(imported.id)
+        ?? await fromUuid(imported.uuid).catch(() => null);
+      if (!actor || actor.documentName !== "Actor") {
+        return ui.notifications.error("The imported companion Actor could not be resolved in the World.");
+      }
+
       await this.close();
       const linked = await this.manager?._linkCompanion(actor);
       if (linked === false) return ui.notifications.error("The creature was imported, but could not be bonded to this Tamer.");
+      if (this.manager?._tcmRefresh) await this.manager._tcmRefresh();
     } catch (error) {
       console.error("[Tamer Companion Manager] Failed to import companion.", { error, pack: pack.collection, documentId });
       return ui.notifications.error("The companion could not be imported. See the browser console for details.");
