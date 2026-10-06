@@ -713,7 +713,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             const repeatable = limit > 1;
 
             return `
-              <div class="tcm-advancement-option tcm-improvement-quantity${initiallyHidden ? ' is-prerequisite-hidden' : ''}"
+              <div class="tcm-advancement-option${initiallyHidden ? ' is-prerequisite-hidden' : ''}"
+                data-tcm-improvement
                 data-tcm-tooltip="${esc(tooltipHtml)}"
                 data-prerequisites="${esc(prereqData)}"
                 data-uuid="${esc(uuid)}"
@@ -743,7 +744,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             <h2>Choose Improvement</h2>
             <p>Choose up to <strong>${progression.target}</strong> improvement${progression.target === 1 ? "" : "s"}. Hover over an improvement for its full description.</p>
           </div>
-          <div class="tcm-advancement-count"><strong class="tcm-selected-count">${selected.size}</strong> / ${progression.target}</div>
+          <div class="tcm-advancement-count"><strong class="tcm-selected-count">${selectedEntries.length}</strong> / ${progression.target}</div>
         </div>
         <div class="tcm-advancement-list">${groupHtml}</div>
       </div>`;
@@ -756,7 +757,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       buttons: [
         { action: "save", label: "Save Changes", default: true, callback: (event, button) => {
           const values = [];
-          for (const option of button.form.querySelectorAll(".tcm-improvement-quantity")) {
+          for (const option of button.form.querySelectorAll(".tcm-advancement-option[data-tcm-improvement]")) {
             const n = Math.max(0, Number(option.dataset.count ?? 0));
             for (let i = 0; i < n; i++) values.push(option.dataset.uuid);
           }
@@ -842,7 +843,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         hideTooltip();
 
         const updateCount = () => {
-          const options = [...root.querySelectorAll('.tcm-improvement-quantity')];
+          const options = [...root.querySelectorAll('.tcm-advancement-option[data-tcm-improvement]')];
           const counts = new Map(options.map(option => [option.dataset.uuid, Math.max(0, Number(option.dataset.count ?? 0))]));
           const total = [...counts.values()].reduce((sum, n) => sum + n, 0);
           if (count) count.textContent = total;
@@ -876,7 +877,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           const plus = event.target.closest?.('[data-improvement-plus]');
           const minus = event.target.closest?.('[data-improvement-minus]');
           if (!plus && !minus) return;
-          const option = event.target.closest?.('.tcm-improvement-quantity');
+          const option = event.target.closest?.('.tcm-advancement-option[data-tcm-improvement]');
           if (!option) return;
           event.preventDefault();
           event.stopPropagation();
@@ -885,7 +886,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           updateCount();
         });
 
-        for (const input of boxes) input.addEventListener('change', updateCount);
         updateCount();
         hideTooltip();
       }
