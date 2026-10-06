@@ -17,11 +17,13 @@ class TamerCompanionSheetTab {
   }
 
   static findBody(root) {
-    // D&D 5e v6 ApplicationV2 renders the tab navigation as its own
-    // "tabs" part and each actual tab body as a separate ApplicationV2 part.
-    // The Companion Manager must therefore live at the sheet root, alongside
-    // those parts, rather than inside the navigation part.
-    return root;
+    // D&D 5e v6 renders each primary tab as its own ApplicationV2 part.
+    // Use the Details tab-body as the stable host for our custom tab content;
+    // the existing sheet CSS then hides the native tab body while the
+    // Companion Manager is active without modifying ApplicationV2's tab state.
+    return root.querySelector('[data-application-part="details"]')
+      ?? root.querySelector('[data-container-id="tabs"]')
+      ?? root.querySelector(".tab-body");
   }
 
   static async renderCompanionImprovements(app, root, actor) {
@@ -36,8 +38,8 @@ class TamerCompanionSheetTab {
 
     const targetTab = root.querySelector('[data-application-part="details"]')
       ?? root.querySelector('[data-application-part="features"]')
-      ?? root.querySelector('[data-container-id="tabs"] .tab')
-      ?? root.querySelector(".tab-body .tab")
+      ?? root.querySelector('[data-container-id="tabs"]')
+      ?? root.querySelector(".tab-body")
       ?? root.querySelector(".sheet-body .tab")
       ?? root.querySelector(".sheet-content .tab");
     if (!targetTab) return;
