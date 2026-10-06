@@ -403,5 +403,12 @@ class TamerCompanionSheetTab {
 }
 
 Hooks.once("init", () => {
-  Hooks.on("renderActorSheetV2", (app, element) => TamerCompanionSheetTab.attach(app, element));
+  // dnd5e v6 uses an ActorSheetV2-derived sheet whose concrete ApplicationV2
+  // class can vary. The generic ApplicationV2 render hook is the stable v14
+  // entry point and lets us attach to the sheet without depending on a
+  // specific ActorSheetV2 hook name.
+  Hooks.on("renderApplicationV2", (app, element) => {
+    if (!app?.actor && !app?.document?.documentName) return;
+    void TamerCompanionSheetTab.attach(app, element);
+  });
 });
