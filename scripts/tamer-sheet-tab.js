@@ -403,12 +403,5 @@ class TamerCompanionSheetTab {
 }
 
 Hooks.once("init", () => {
-  const attach = (app, element) => {
-    if (app?.actor?.type !== "character") return;
-    void TamerCompanionSheetTab.attach(app, element);
-  };
-
-  Hooks.on("renderCharacterActorSheet", attach);
-  Hooks.on("renderActorSheetV2", attach);
-  Hooks.on("renderApplicationV2", attach);
+  Hooks.on("renderActorSheetV2", (app, element) => TamerCompanionSheetTab.attach(app, element));
 });
