@@ -85,6 +85,7 @@ class TamerCompanionSheetTab {
         const nativeTab = event.target?.closest?.("[data-tab]");
         if (!nativeTab || nativeTab === tab) return;
         controller._tcmTabActive = false;
+        controller._tcmRendered = false;
         root.classList.remove("tcm-companions-active");
         content.classList.remove("active");
         content.hidden = true;
@@ -138,7 +139,16 @@ class TamerCompanionSheetTab {
     // repeated UUID resolution, flag cloning, template rendering, and DOM
     // replacement while the native sheet is being used.
     if (controller._tcmTabActive) {
-      await this.activate(root, nav, body, tab, content, controller);
+      // Native ActorSheetV2 may render repeatedly while the embedded tab is
+      // visible. Do not rebuild the Companion Manager for every native render.
+      // Actions and explicit refreshes still call render() when the manager
+      // actually needs new data.
+      const actorChanged = controller._tcmRenderedActorUuid !== actor.uuid;
+      if (actorChanged || !controller._tcmRendered) {
+        await this.activate(root, nav, body, tab, content, controller);
+      } else {
+        this.activateVisualState(root, tab, content);
+      }
     }
   }
 
@@ -163,18 +173,15 @@ class TamerCompanionSheetTab {
     }
 
     controller._tcmSheetContent.innerHTML = await renderTemplate(
-      `modules/${MODULE_ID}/templates/companion-manager.hbs`,
+      "modules/" + MODULE_ID + "/templates/companion-manager.hbs",
       context
     );
     controller._tcmSheetContent.querySelector(".tcm-root")?.classList.add("tcm-embedded");
+    controller._tcmRenderedActorUuid = controller.tamer?.uuid ?? null;
+    controller._tcmRendered = true;
   }
 
-  static async activate(root, nav, body, tab, content, controller) {
-    for (const link of nav.querySelectorAll("[data-tab]")) {
-      link.classList.toggle("active", link === tab);
-      link.setAttribute("aria-selected", link === tab ? "true" : "false");
-    }
-
+  static activateVisualState(root, tab, content) {
     // Do not toggle native tab bodies here. ApplicationV2 owns their
     // visibility. The companion-active class lets CSS temporarily replace
     // the native content without corrupting ApplicationV2's tab state.
@@ -185,6 +192,10 @@ class TamerCompanionSheetTab {
     content.classList.add("active");
     content.style.display = "flex";
     content.style.pointerEvents = "auto";
+  }
+
+  static async activate(root, nav, body, tab, content, controller) {
+    this.activateVisualState(root, tab, content);
     await this.render(controller);
   }
 
