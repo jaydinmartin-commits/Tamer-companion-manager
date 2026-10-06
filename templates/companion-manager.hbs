@@ -1,9 +1,36 @@
 <section class="tcm-manager" data-tcm-root>
   <header class="tcm-manager__header">
-    <h2>Tamer Companion Manager</h2>
+    <div>
+      <h2>Tamer Companion Manager</h2>
+      {{#if tamer}}
+        <p class="tcm-manager__tamer">{{tamer.name}}</p>
+      {{else}}
+        <p class="tcm-manager__tamer">No Tamer selected</p>
+      {{/if}}
+    </div>
+    <div class="tcm-manager__actions">
+      <button type="button" data-action="addCompanion"><i class="fa-solid fa-plus"></i> Add Companion</button>
+      <button type="button" data-action="refresh" title="Refresh"><i class="fa-solid fa-rotate"></i></button>
+    </div>
   </header>
 
   <main class="tcm-manager__body">
-    <p class="tcm-manager__empty">No companion records are loaded yet.</p>
+    {{#if companions.length}}
+      <div class="tcm-manager__companions">
+        {{#each companions}}
+          <article class="tcm-companion-card" data-record-id="{{id}}">
+            <div class="tcm-companion-card__identity">
+              <strong>{{name}}</strong>
+              <span>{{actorUuid}}</span>
+            </div>
+            <button type="button" data-action="removeCompanion" data-record-id="{{id}}" title="Remove companion">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </article>
+        {{/each}}
+      </div>
+    {{else}}
+      <p class="tcm-manager__empty">No companions are currently bonded.</p>
+    {{/if}}
   </main>
 </section>
