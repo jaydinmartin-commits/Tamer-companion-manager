@@ -1,4 +1,21 @@
 <section class="tcm-companion-browser-root">
+  <header class="tcm-browser-header">
+    <div class="tcm-browser-title">
+      <i class="fa-solid fa-paw"></i>
+      <div>
+        <h2>Choose Companion</h2>
+        <p>Choose a creature that meets this Tamer's companion requirements.</p>
+      </div>
+    </div>
+    {{#if limits}}
+      <div class="tcm-browser-limits">
+        <span><b>CR</b> ≤ {{limits.cr}}</span>
+        <span><b>Size</b> ≤ {{limits.size}}</span>
+        <span><b>Type</b> No humanoid, giant, or swarm</span>
+      </div>
+    {{/if}}
+  </header>
+
   <div class="tcm-companion-browser-toolbar">
     <div class="tcm-companion-browser-search">
       <i class="fa-solid fa-magnifying-glass"></i>
@@ -14,21 +31,42 @@
 
   {{#if packs.length}}
     <div class="tcm-companion-browser-meta">
-      <span class="tcm-companion-browser-count">{{entries.length}} companions</span>
-      <span>Choose a creature to import it as a World Actor and bond it to this Tamer.</span>
+      <span class="tcm-companion-browser-count">{{eligibleCount}} eligible of {{totalCount}}</span>
+      <span>Restricted creatures are shown for reference but cannot be imported.</span>
     </div>
+
     <div class="tcm-companion-browser-list">
       {{#each entries}}
-        <button type="button" class="tcm-companion-browser-entry" data-action="selectCompanion" data-pack="{{source}}" data-id="{{id}}" data-search="{{name}} {{sourceTitle}}">
-          <img src="{{img}}" alt="">
+        <button type="button"
+                class="tcm-companion-browser-entry {{#unless eligible}}is-ineligible{{/unless}}"
+                data-action="selectCompanion"
+                data-pack="{{source}}"
+                data-id="{{id}}"
+                data-search="{{search}}"
+                {{#unless eligible}}disabled{{/unless}}>
+          <span class="tcm-browser-entry-image">
+            <img src="{{img}}" alt="">
+          </span>
           <span class="tcm-companion-browser-entry-text">
             <strong>{{name}}</strong>
-            <small>{{sourceTitle}}{{#if type}} · {{type}}{{/if}}</small>
+            <small>{{sourceTitle}}</small>
           </span>
-          <i class="fa-solid fa-plus"></i>
+          <span class="tcm-browser-entry-stats">
+            <span>{{#if cr}}CR {{cr}}{{else}}CR —{{/if}}</span>
+            <span>{{size}}</span>
+            <span>{{type}}</span>
+          </span>
+          <span class="tcm-browser-entry-action">
+            {{#if eligible}}
+              <i class="fa-solid fa-plus"></i>
+            {{else}}
+              <i class="fa-solid fa-lock"></i>
+            {{/if}}
+          </span>
         </button>
       {{/each}}
     </div>
+
     <div class="tcm-companion-browser-empty" hidden>
       <i class="fa-solid fa-magnifying-glass"></i>
       <strong>No matching companions</strong>
