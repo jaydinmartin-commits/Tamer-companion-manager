@@ -1625,3 +1625,83 @@
   background:rgba(0,0,0,.08);
   font-size:.58rem;
 }
+
+
+/* v0.1.110 — Companion character-sheet Improvements disclosure.
+   This lives on the native companion sheet, not the locked Companion Manager card. */
+.tcm-companion-improvements-sheet{
+  flex:0 0 auto;
+  margin:0 0 8px;
+  border:1px solid var(--tcm-native-soft);
+  border-radius:3px;
+  background:rgba(0,0,0,.08);
+}
+.tcm-companion-improvements-sheet summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  min-height:31px;
+  padding:5px 8px;
+  cursor:pointer;
+  list-style:none;
+  color:var(--tcm-native-text);
+  font-size:.68rem;
+  font-weight:600;
+}
+.tcm-companion-improvements-sheet summary::-webkit-details-marker{display:none}
+.tcm-companion-improvements-sheet summary span{
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+.tcm-companion-improvements-sheet summary i{color:var(--tcm-native-gold)}
+.tcm-companion-improvements-sheet summary strong{
+  color:var(--tcm-native-gold);
+  font-size:.61rem;
+}
+.tcm-companion-improvements-body{
+  padding:0 8px 7px;
+  border-top:1px solid var(--tcm-native-soft);
+}
+.tcm-companion-improvements-body ul{
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+  margin:5px 0 0;
+  padding:0;
+  list-style:none;
+}
+.tcm-companion-improvements-body li{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  min-height:22px;
+  padding:2px 4px;
+  color:var(--tcm-native-muted);
+  font-size:.62rem;
+}
+.tcm-companion-improvements-body li strong,
+.tcm-companion-improvements-body li em{
+  color:var(--tcm-native-gold);
+  font-size:.59rem;
+  font-style:normal;
+}
+.tcm-companion-improvements-body p{
+  margin:6px 2px 1px;
+  color:var(--tcm-native-muted);
+  font-size:.61rem;
+}
+.tcm-companion-improvements-bonus{
+  margin-top:5px;
+  padding-top:5px;
+  border-top:1px solid var(--tcm-native-soft);
+}
+.tcm-companion-improvements-bonus>small{
+  color:var(--tcm-native-gold);
+  font-size:.57rem;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
