@@ -1,8 +1,8 @@
 <form class="tcm-source-registry">
-  <header class="tcm-source-registry-header">
+  <header class="tcm-config-header">
     <div>
       <h2>Companion Sources</h2>
-      <p>Select the Actor compendiums that players can browse from <strong>Add Companion</strong>.</p>
+      <p>Select the Actor compendiums that players may browse from <strong>Add Companion</strong>.</p>
     </div>
     <strong>{{selectedCount}} selected</strong>
   </header>
@@ -14,8 +14,8 @@
         <span class="tcm-source-pack-check"></span>
         <span class="tcm-source-pack-text">
           <strong>{{title}}</strong>
-          {{#if packageName}}<small>{{packageName}}</small>{{/if}}
-          <em>{{collection}}{{#unless visible}} · hidden from players{{/unless}}</em>
+          <small>{{#if packageName}}{{packageName}}{{else}}World compendium{{/if}}</small>
+          <em>{{#unless visible}}Hidden from players · {{/unless}}{{collection}}</em>
         </span>
       </label>
     {{else}}
@@ -23,11 +23,10 @@
     {{/each}}
   </div>
 
-  <footer class="tcm-source-registry-footer">
-    <span>Only Actor compendiums are listed. Foundry permissions still apply to players.</span>
-    <div>
-      <button type="button" data-action="save" class="primary">Save Sources</button>
-      <button type="button" data-action="close">Cancel</button>
-    </div>
+  <footer class="tcm-config-footer">
+    <span>Only Actor compendiums are listed.</span>
+    <span></span>
+    <button type="button" data-action="cancel">Cancel</button>
+    <button type="button" data-action="save" class="primary">Save</button>
   </footer>
 </form>
