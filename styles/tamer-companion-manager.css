@@ -55,6 +55,7 @@
   --tcm-panel:rgba(0,0,0,.12);
   --tcm-panel-strong:rgba(0,0,0,.2);
   --tcm-accent:var(--dnd5e-color-gold,#d9a441);
+  --tcm-card-background:var(--dnd5e-color-blue-gray-2,#252830);
 }
 
 /* Shared window polish */
@@ -81,7 +82,7 @@
 
 /* Companion cards */
 .tcm-companion-grid{padding:12px 15px 15px;gap:10px}
-.tcm-card{border-radius:7px;border-color:var(--tcm-border-soft);background:var(--tcm-panel);box-shadow:0 2px 7px rgba(0,0,0,.14)}
+.tcm-card{border-radius:7px;border-color:var(--tcm-border-soft);background:var(--tcm-card-background);box-shadow:0 2px 7px rgba(0,0,0,.14)}
 .tcm-card.is-summoned{box-shadow:0 0 0 1px color-mix(in srgb,var(--tcm-accent) 25%,transparent),0 2px 8px rgba(0,0,0,.2)}
 .tcm-card-image{flex-basis:88px;width:88px;min-height:150px}
 .tcm-card-image img{min-height:150px}
