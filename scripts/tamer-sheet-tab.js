@@ -38,7 +38,8 @@ class TamerCompanionSheetTab {
     const record = TamerCompanionManager.records(tamer).find(r => String(r?.id) === String(link.recordId));
     if (!record) return;
 
-    const targetTab = root.querySelector('[data-container-id="tabs"] .tab')
+    const targetTab = root.querySelector('[data-application-part="tabs"] .tab')
+      ?? root.querySelector('[data-container-id="tabs"] .tab')
       ?? root.querySelector(".tab-body .tab")
       ?? root.querySelector(".sheet-body .tab")
       ?? root.querySelector(".sheet-content .tab");
