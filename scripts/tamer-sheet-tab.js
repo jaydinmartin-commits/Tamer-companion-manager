@@ -131,8 +131,12 @@ class TamerCompanionSheetTab {
     controller.tamer = actor;
     controller._tcmSheetContent = content;
     controller._tcmSheetApp = app;
-    await this.render(controller);
 
+    // Do not rebuild the Companion Manager every time the native Actor Sheet
+    // renders. ActorSheetV2 can re-render for many unrelated document/UI
+    // changes. The companion tab is rendered lazily when opened, which avoids
+    // repeated UUID resolution, flag cloning, template rendering, and DOM
+    // replacement while the native sheet is being used.
     if (controller._tcmTabActive) {
       await this.activate(root, nav, body, tab, content, controller);
     }
