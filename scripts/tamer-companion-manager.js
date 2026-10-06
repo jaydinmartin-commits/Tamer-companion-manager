@@ -78,6 +78,15 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     // render that meant multiple asynchronous UUID lookups per companion.
     const resolved = await Promise.all(records.map(async record => {
       const actor = await TamerCompanionManager.resolveCompanionActor(record);
+      // Backfill the sheet-link flag for companions created before the native
+      // companion-sheet Improvements disclosure existed. This only writes when
+      // the metadata is missing or points at a different Tamer/record.
+      if (actor) {
+        const link = actor.getFlag(MODULE_ID, "companionLink");
+        if (link?.tamerUuid !== this.tamer.uuid || String(link?.recordId ?? "") !== String(record.id)) {
+          await actor.setFlag(MODULE_ID, "companionLink", { tamerUuid: this.tamer.uuid, recordId: record.id });
+        }
+      }
       const token = record?.tokenUuid
         ? await fromUuid(record.tokenUuid).catch(() => null)
         : null;
