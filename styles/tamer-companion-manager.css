@@ -9,10 +9,62 @@
   min-height: 0;
 }
 
+.tamer-companion-manager .tcm-manager__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--color-border-light-primary);
+}
+
+.tamer-companion-manager .tcm-manager__header h2 {
+  margin: 0;
+}
+
+.tamer-companion-manager .tcm-manager__tamer {
+  margin: 0.25rem 0 0;
+}
+
+.tamer-companion-manager .tcm-manager__actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
 .tamer-companion-manager .tcm-manager__body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  padding: 0.75rem;
+}
+
+.tamer-companion-manager .tcm-manager__companions {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.tamer-companion-manager .tcm-companion-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border-light-primary);
+  border-radius: 0.25rem;
+  background: var(--color-bg-option);
+}
+
+.tamer-companion-manager .tcm-companion-card__identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.tamer-companion-manager .tcm-companion-card__identity span {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
 }
 
 .tamer-companion-manager button,
