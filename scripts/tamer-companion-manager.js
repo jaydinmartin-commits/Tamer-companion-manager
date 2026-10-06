@@ -136,11 +136,18 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         (record?.improvements ?? []).filter(entry => !entry?.isBonus)
       );
       const repeatableImprovements = [];
+      // Repeatable-improvement display is supplemental to the manager itself.
+      // A stale/malformed source Item must never prevent the Companion Manager
+      // from rendering.
       for (const [sourceUuid, count] of improvementCounts) {
-        const sourceItem = await fromUuid(sourceUuid).catch(() => null);
-        if (!sourceItem) continue;
-        if (TamerCompanionManager.getImprovementSelectionLimit(sourceItem, actor, level) <= 1) continue;
-        repeatableImprovements.push({ uuid: sourceUuid, name: sourceItem.name, count });
+        try {
+          const sourceItem = await fromUuid(sourceUuid).catch(() => null);
+          if (!sourceItem) continue;
+          if (TamerCompanionManager.getImprovementSelectionLimit(sourceItem, actor, level) <= 1) continue;
+          repeatableImprovements.push({ uuid: sourceUuid, name: sourceItem.name, count });
+        } catch (error) {
+          console.warn("[Tamer Companion Manager] Skipping invalid repeatable improvement entry.", sourceUuid, error);
+        }
       }
 
       return {
