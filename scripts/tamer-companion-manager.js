@@ -2229,9 +2229,27 @@ Hooks.once("init", () => {
   // Primary trigger: the Actor's overall level changes during the D&D 5e advancement.
   Hooks.on("updateActor", async (actor, changes) => {
     if (!TamerCompanionManager.isTamer(actor)) return;
-    if (actor.isOwner || game.user.isGM) await TamerCompanionManager.syncCompanionNativeStats(actor);
-    if (!Object.hasOwn(changes?.system?.details ?? {}, "level")) return;
-    await syncTamerCompanionAdvancement(actor);
+    if (!(actor.isOwner || game.user.isGM)) return;
+
+    // Avoid synchronizing every companion on every Tamer Actor update.
+    // Only changes that can affect companion proficiency/HP or advancement
+    // need the synchronization pass.
+    const systemChanges = changes?.system ?? {};
+    const detailsChanges = systemChanges?.details ?? {};
+    const abilitiesChanged = Boolean(systemChanges?.abilities);
+    const levelChanged = Object.hasOwn(detailsChanges, "level");
+    const profRelevant =
+      levelChanged ||
+      Boolean(systemChanges?.attributes?.prof) ||
+      Boolean(systemChanges?.details?.level) ||
+      Boolean(systemChanges?.classes);
+
+    if (!profRelevant && !abilitiesChanged) return;
+    if (levelChanged) {
+      await syncTamerCompanionAdvancement(actor);
+      return;
+    }
+    await TamerCompanionManager.syncCompanionNativeStats(actor);
   });
 
   // Secondary trigger: some class advancement flows update the class Item directly.
@@ -2252,21 +2270,26 @@ Hooks.once("init", () => {
   // vessel association. The companion Actor and Pocket Family record remain intact.
   Hooks.on("deleteItem", async item => {
     if (!item?.uuid || item.type === "class") return;
-    const actors = [...(game.actors?.contents ?? [])];
-    for (const tamer of actors) {
-      if (!TamerCompanionManager.isTamer(tamer)) continue;
-      const records = TamerCompanionManager.records(tamer);
-      let changed = false;
-      for (const record of records) {
-        if (record?.vesselUuid !== item.uuid) continue;
-        record.vesselUuid = null;
-        record.vesselName = "";
-        changed = true;
-      }
-      if (changed && (tamer.isOwner || game.user.isGM)) {
-        await TamerCompanionManager.save(tamer, records);
-                  await TamerCompanionManager.refreshOpenManagers(tamer);
-      }
+
+    // Only a Tamer owning the deleted Item can reference it as a vessel.
+    // Avoid scanning every Actor in the world for every unrelated Item
+    // deletion. The common case is an Item on an Actor, so inspect that
+    // parent first; world-level deletion has no valid vessel association.
+    const tamer = item.parent?.documentName === "Actor" ? item.parent : null;
+    if (!tamer || !TamerCompanionManager.isTamer(tamer)) return;
+    if (!(tamer.isOwner || game.user.isGM)) return;
+
+    const records = TamerCompanionManager.records(tamer);
+    let changed = false;
+    for (const record of records) {
+      if (record?.vesselUuid !== item.uuid) continue;
+      record.vesselUuid = null;
+      record.vesselName = "";
+      changed = true;
+    }
+    if (changed) {
+      await TamerCompanionManager.save(tamer, records);
+      await TamerCompanionManager.refreshOpenManagers(tamer);
     }
   });
 
