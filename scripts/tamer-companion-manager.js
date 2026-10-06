@@ -689,25 +689,34 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             const uuid = item.uuid;
             const prereq = this.parseImprovementPrerequisites(item);
             const eligibility = this.getImprovementEligibility(item, actor, level, selectedUuids, optionsByName);
-            const initiallyHidden = !selected.has(uuid) && !eligibility.eligible;
+            const currentCount = selectedCounts.get(uuid) ?? 0;
+            const limit = this.getImprovementSelectionLimit(item, actor, level);
+            const initiallyHidden = currentCount === 0 && !eligibility.eligible;
             const prereqData = encodeURIComponent(JSON.stringify(prereq));
             const tooltipHtml = this.getImprovementDescriptionHTML(item);
-            const requirementText = prereq.text ? `Requires: ${prereq.text}` : "";
+            const requirementText = prereq.text ? `Requires: ${prereq.text}` : '';
+            const repeatable = limit > 1;
 
             return `
-              <label class="tcm-advancement-option${initiallyHidden ? " is-prerequisite-hidden" : ""}"
+              <div class="tcm-advancement-option tcm-improvement-quantity${initiallyHidden ? ' is-prerequisite-hidden' : ''}"
                 data-tcm-tooltip="${esc(tooltipHtml)}"
                 data-prerequisites="${esc(prereqData)}"
+                data-uuid="${esc(uuid)}"
+                data-count="${currentCount}"
+                data-limit="${repeatable ? 'repeatable' : 'single'}"
                 ${initiallyHidden ? 'hidden' : ''}>
-                <input type="checkbox" name="improvement" value="${esc(uuid)}"${selected.has(uuid) ? " checked" : ""}${initiallyHidden ? " disabled" : ""}>
-                <span class="tcm-advancement-check"></span>
-                <img class="tcm-advancement-icon" src="${esc(item.img || "icons/svg/item-bag.svg")}" alt="">
+                <img class="tcm-advancement-icon" src="${esc(item.img || 'icons/svg/item-bag.svg')}" alt="">
                 <span class="tcm-advancement-text">
                   <strong>${esc(item.name)}</strong>
-                  ${requirementText ? `<em class="tcm-improvement-prerequisite">${esc(requirementText)}</em>` : ""}
+                  ${requirementText ? `<em class="tcm-improvement-prerequisite">${esc(requirementText)}</em>` : ''}
                 </span>
-              </label>`;
-          }).join("")}
+                <span class="tcm-improvement-quantity" role="group" aria-label="${esc(item.name)} quantity">
+                  <button type="button" data-improvement-minus aria-label="Remove one">−</button>
+                  <strong data-improvement-count>${currentCount}</strong>
+                  <button type="button" data-improvement-plus aria-label="Add one">+</button>
+                </span>
+              </div>`;
+                    }).join("")}
         </div>
       </section>`;
 
