@@ -1625,12 +1625,16 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   static async _onOpenCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)], actor = record?.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; actor?.sheet?.render({ force: true }); }
 
   static async _onSummonCompanion(event, target) {
-    const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)]; if (!record) return;
-    const manager = this, tamerSheet = manager.tamer?.sheet, sheetWasRendered = Boolean(tamerSheet?.rendered);
-    await manager.close();
+    const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)];
+    if (!record) return;
+    const manager = this;
+    const tamerSheet = manager.tamer?.sheet;
+    const managerWasRendered = Boolean(manager.rendered);
+    const sheetWasRendered = Boolean(tamerSheet?.rendered);
+    const summoned = await TamerCompanionManager.summon(manager.tamer, record);
+    if (!summoned) return;
+    if (managerWasRendered) await manager.close();
     if (sheetWasRendered) await tamerSheet.close();
-    // Do not re-render either window. Both remain closed after summoning.
-    await TamerCompanionManager.summon(manager.tamer, record);
   }
 
   static async _onTrainCompanion(event,target) {
