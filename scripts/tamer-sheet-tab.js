@@ -16,31 +16,12 @@ class TamerCompanionSheetTab {
     return app?.actor ?? app?.document ?? null;
   }
 
-  static findNav(root) {
-    // dnd5e v6 uses ApplicationV2 tab configuration, but the exact wrapper
-    // element is a system template detail. Prefer the native tab container
-    // and fall back to the parent of the rendered native tab buttons.
-    const part = root.querySelector('[data-application-part="tabs"]');
-    const direct = part?.matches("nav, [role='tablist']") ? part : part?.querySelector("nav, [role='tablist']");
-    if (direct) return direct;
-
-    const primary = root.querySelector("[data-group='primary'][role='tablist'], [data-group='primary'].tabs, nav.sheet-tabs, nav.tabs, [role='tablist']");
-    if (primary) return primary;
-
-    const nativeTab = root.querySelector("[data-tab]");
-    if (nativeTab?.parentElement?.querySelectorAll("[data-tab]").length >= 2) {
-      return nativeTab.parentElement;
-    }
-
-    return null;
-  }
-
   static findBody(root) {
-    // Keep the embedded Companion Manager inside the native sheet content
-    // region. ApplicationV2 may render this as a tab container or a sheet body
-    // depending on the dnd5e sheet implementation.
+    // dnd5e v6 ApplicationV2 uses a dedicated container for all native tab
+    // bodies. Keep the embedded Companion Manager inside that container so
+    // the native header, ability scores, and collapsible portrait/sidebar
+    // remain outside of it and continue to control the sheet layout.
     return root.querySelector('[data-container-id="tabs"]')
-      ?? root.querySelector('[data-application-part="details"]')
       ?? root.querySelector(".tab-body")
       ?? root.querySelector(".sheet-body")
       ?? root.querySelector(".sheet-content");
@@ -133,7 +114,7 @@ class TamerCompanionSheetTab {
       return;
     }
 
-    const nav = this.findNav(root);
+    const nav = root.querySelector("nav.sheet-tabs, nav.tabs, [role='tablist']");
     const body = this.findBody(root);
     if (!nav || !body) return;
 
@@ -423,13 +404,11 @@ class TamerCompanionSheetTab {
 
 Hooks.once("init", () => {
   const attach = (app, element) => {
-    // Only inspect character sheets. This keeps the generic ApplicationV2
-    // render hook cheap while remaining compatible with dnd5e's current
-    // CharacterActorSheet implementation.
     if (app?.actor?.type !== "character") return;
     void TamerCompanionSheetTab.attach(app, element);
   };
 
-  Hooks.on("renderApplicationV2", attach);
+  Hooks.on("renderCharacterActorSheet", attach);
   Hooks.on("renderActorSheetV2", attach);
+  Hooks.on("renderApplicationV2", attach);
 });
