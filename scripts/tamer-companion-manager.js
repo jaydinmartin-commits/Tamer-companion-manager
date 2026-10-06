@@ -599,6 +599,26 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     return { eligible: missing.length === 0, prerequisite: prereq.text, missing };
   }
 
+  static getImprovementSelectionLimit(item, actor, level) {
+    const name = this.normalizeImprovementName(item?.name ?? "");
+    const repeatableCore = new Set(["speed training","toughen up","ability boost","survival instincts","war training"]);
+    if (name === "go for the throat") return level >= 9 ? 3 : level >= 5 ? 2 : 1;
+    if (repeatableCore.has(name)) return 20;
+    const description = this.getImprovementDescription(item);
+    if (/can be taken multiple times|can be taken up to \d+ times|a second application/i.test(description)) return 20;
+    return 1;
+  }
+
+  static getImprovementCountMap(entries = []) {
+    const counts = new Map();
+    for (const entry of entries) {
+      if (entry?.isBonus) continue;
+      const uuid = String(entry?.sourceUuid ?? "");
+      if (uuid) counts.set(uuid, (counts.get(uuid) ?? 0) + 1);
+    }
+    return counts;
+  }
+
   static async manageImprovements(tamer, record, actor) {
     const level = this.getTamerLevel(tamer);
     const progression = this.getProgression(record, actor, level);
@@ -613,7 +633,13 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const item of bespoke) sources.set(item.uuid, { item, tree: tree.name });
 
     const bonusSelected = new Set((record?.improvements ?? []).filter(entry => entry?.isBonus).map(entry => String(entry.sourceUuid ?? "")));
-    const selected = new Map((record?.improvements ?? []).filter(entry => !entry?.isBonus).map(entry => [String(entry.sourceUuid ?? ""), entry]));
+    const selectedEntries = (record?.improvements ?? []).filter(entry => !entry?.isBonus);
+    const selectedCounts = this.getImprovementCountMap(selectedEntries);
+    const selected = new Map();
+    for (const entry of selectedEntries) {
+      const uuid = String(entry.sourceUuid ?? "");
+      if (!selected.has(uuid)) selected.set(uuid, entry);
+    }
     const options = [...sources.values()].filter(({ item }) => !bonusSelected.has(item.uuid));
     for (const entry of selected.values()) {
       if (sources.has(entry.sourceUuid)) continue;
@@ -705,7 +731,11 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       content,
       buttons: [
         { action: "save", label: "Save Changes", default: true, callback: (event, button) => {
-          const values = [...button.form.querySelectorAll('input[name="improvement"]:checked')].map(input => input.value);
+          const values = [];
+          for (const option of button.form.querySelectorAll(".tcm-improvement-quantity")) {
+            const n = Math.max(0, Number(option.dataset.count ?? 0));
+            for (let i = 0; i < n; i++) values.push(option.dataset.uuid);
+          }
           if (values.length > progression.target) {
             ui.notifications.warn(`This companion can have at most ${progression.target} selected improvement${progression.target === 1 ? "" : "s"}.`);
             return null;
@@ -788,14 +818,14 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         hideTooltip();
 
         const updateCount = () => {
-          const selectedNow = new Set(boxes.filter(input => input.checked).map(input => input.value));
-          const n = selectedNow.size;
-          if (count) count.textContent = n;
-
-          for (const input of boxes) {
+          const options = [...root.querySelectorAll('.tcm-improvement-quantity')];
+          const counts = new Map(options.map(option => [option.dataset.uuid, Math.max(0, Number(option.dataset.count ?? 0))]));
+          const total = [...counts.values()].reduce((sum, n) => sum + n, 0);
+          if (count) count.textContent = total;
+          for (const option of options) {
             let prereq = { level: 0, names: [] };
-            try { prereq = JSON.parse(decodeURIComponent(input.closest(".tcm-advancement-option")?.dataset.prerequisites || "")); } catch {}
-
+            try { prereq = JSON.parse(decodeURIComponent(option.dataset.prerequisites || '')); } catch {}
+            const selectedNow = new Set([...counts.entries()].filter(([, n]) => n > 0).map(([uuid]) => uuid));
             const missing = [];
             if (prereq.level && level < prereq.level) missing.push(`Tamer level ${prereq.level}`);
             for (const name of prereq.names ?? []) {
@@ -803,25 +833,44 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
               const uuids = optionsByName.get(this.normalizeImprovementName(name)) ?? new Set();
               if (![...uuids].some(uuid => selectedNow.has(uuid))) missing.push(name);
             }
-
-            const option = input.closest(".tcm-advancement-option");
-            const selected = input.checked;
-            const unavailable = !selected && missing.length > 0;
-
+            const current = Math.max(0, Number(option.dataset.count ?? 0));
+            const limit = option.dataset.limit === 'repeatable' ? Math.max(1, progression.target) : 1;
+            const unavailable = current === 0 && missing.length > 0;
             option.hidden = unavailable;
-            option.classList.toggle("is-prerequisite-hidden", unavailable);
-            input.disabled = unavailable || (!selected && n >= progression.target);
+            option.classList.toggle('is-prerequisite-hidden', unavailable);
+            option.classList.toggle('is-selected', current > 0);
+            const minus = option.querySelector('[data-improvement-minus]');
+            const plus = option.querySelector('[data-improvement-plus]');
+            const value = option.querySelector('[data-improvement-count]');
+            if (value) value.textContent = current;
+            if (minus) minus.disabled = current <= 0;
+            if (plus) plus.disabled = unavailable || total >= progression.target || current >= limit;
           }
         };
 
-        for (const input of boxes) input.addEventListener("change", updateCount);
+        root.addEventListener('click', event => {
+          const plus = event.target.closest?.('[data-improvement-plus]');
+          const minus = event.target.closest?.('[data-improvement-minus]');
+          if (!plus && !minus) return;
+          const option = event.target.closest?.('.tcm-improvement-quantity');
+          if (!option) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const current = Math.max(0, Number(option.dataset.count ?? 0));
+          option.dataset.count = String(Math.max(0, current + (plus ? 1 : -1)));
+          updateCount();
+        });
+
+        for (const input of boxes) input.addEventListener('change', updateCount);
         updateCount();
         hideTooltip();
       }
     });
 
     if (!Array.isArray(result)) return false;
-    const desired = new Set(result);
+    const desiredCounts = new Map();
+    for (const uuid of result) desiredCounts.set(uuid, (desiredCounts.get(uuid) ?? 0) + 1);
+    const desired = new Set(desiredCounts.keys());
     const availableByUuid = new Map(options.map(({ item }) => [item.uuid, item]));
     const availableByName = new Map(options.map(({ item }) => [this.normalizeImprovementName(item.name), item.uuid]));
 
@@ -842,29 +891,42 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       ui.notifications.warn(`Cannot save improvements because prerequisites are missing: ${missingPrerequisites.join("; ")}.`);
       return false;
     }
-    const current = new Map((record?.improvements ?? []).filter(entry => !entry?.isBonus).map(entry => [String(entry.sourceUuid ?? ""), entry]));
+    const currentEntries = (record?.improvements ?? []).filter(entry => !entry?.isBonus);
+    const currentCounts = this.getImprovementCountMap(currentEntries);
     const records = this.records(tamer);
     const target = records.find(r => r.id === record.id);
     if (!target) return false;
     target.improvements ??= [];
 
-    for (const [sourceUuid, entry] of current) {
-      if (desired.has(sourceUuid)) continue;
-      const removed = await this.deleteImprovementItem(actor, entry.itemUuid);
-      if (!removed) return false;
-      target.improvements = target.improvements.filter(x => String(x.sourceUuid ?? "") !== sourceUuid);
+    const entriesByUuid = new Map();
+    for (const entry of currentEntries) {
+      const uuid = String(entry.sourceUuid ?? '');
+      if (!entriesByUuid.has(uuid)) entriesByUuid.set(uuid, []);
+      entriesByUuid.get(uuid).push(entry);
     }
-    for (const sourceUuid of desired) {
-      if (current.has(sourceUuid)) continue;
+    for (const [sourceUuid, entries] of entriesByUuid) {
+      const removeCount = Math.max(0, entries.length - (desiredCounts.get(sourceUuid) ?? 0));
+      for (let i = 0; i < removeCount; i++) {
+        const entry = entries[entries.length - 1 - i];
+        const removed = await this.deleteImprovementItem(actor, entry.itemUuid);
+        if (!removed) return false;
+        target.improvements = target.improvements.filter(x => String(x.itemUuid ?? '') !== String(entry.itemUuid ?? ''));
+      }
+    }
+    for (const [sourceUuid, desiredCount] of desiredCounts) {
+      const addCount = Math.max(0, desiredCount - (currentCounts.get(sourceUuid) ?? 0));
+      if (!addCount) continue;
       const source = await fromUuid(sourceUuid).catch(() => null);
-      if (!source || source.documentName !== "Item") {
+      if (!source || source.documentName !== 'Item') {
         ui.notifications.warn(`Could not resolve improvement ${sourceUuid}; it was not added.`);
         continue;
       }
-      const data = source.toObject(); delete data._id;
-      const added = await this.addImprovementItem(actor, data, source.uuid);
-      if (!added) return false;
-      target.improvements.push({ itemUuid: added.uuid, itemId: added.id, sourceUuid: source.uuid, name: added.name, assignedAtLevel: level });
+      for (let i = 0; i < addCount; i++) {
+        const data = source.toObject(); delete data._id;
+        const added = await this.addImprovementItem(actor, data, source.uuid);
+        if (!added) return false;
+        target.improvements.push({ itemUuid: added.uuid, itemId: added.id, sourceUuid: source.uuid, name: added.name, assignedAtLevel: level });
+      }
     }
     await this.save(tamer, records);
     ui.notifications.info(`${actor.name}'s improvements were updated.`);
