@@ -75,7 +75,7 @@
             <h3>{{name}}</h3>
             {{#if matchIdentifier}}<p><span>Identifier</span> {{matchIdentifier}}</p>{{/if}}
             {{#if matchName}}<p><span>Name fallback</span> {{matchName}}</p>{{/if}}
-            <small>{{sources.length}} source{{#unless sources.length}}s{{else}}{{#unless (eq sources.length 1)}}s{{/unless}}{{/unless}}</small>
+            <small>{{sources.length}} registered source{{#unless sources.length}}s{{/unless}}</small>
           </div>
           <div class="tcm-actions">
             <button type="button" data-action="editTree" data-id="{{id}}">Edit</button>
