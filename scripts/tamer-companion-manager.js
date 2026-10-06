@@ -63,26 +63,94 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     }
 
-    const level = TamerCompanionManager.getTamerLevel(this.tamer), slots = TamerCompanionManager.getPocketFamilySlots(level), records = TamerCompanionManager.records(this.tamer);
-    // Reconcile stale summoned-token references before rendering state.
+    const level = TamerCompanionManager.getTamerLevel(this.tamer);
+    const slots = TamerCompanionManager.getPocketFamilySlots(level);
+    const records = TamerCompanionManager.records(this.tamer);
+    const splicerEnabled = TamerCompanionManager.isSplicer(this.tamer);
+    const splicerRegistry = splicerEnabled ? TamerCompanionManager.getSplicerAugmentRegistry() : null;
+    const splicerCosts = splicerRegistry
+      ? new Map(splicerRegistry.map(a => [String(a.id), Number(a.cost ?? 0)]))
+      : null;
+
+    // Resolve each linked document once per render. The previous implementation
+    // resolved summoned tokens and vessels once during reconciliation and then
+    // resolved them again while building the card context. On a normal manager
+    // render that meant multiple asynchronous UUID lookups per companion.
+    const resolved = await Promise.all(records.map(async record => {
+      const actor = record?.actorUuid
+        ? await fromUuid(record.actorUuid).catch(() => null)
+        : null;
+      const token = record?.tokenUuid
+        ? await fromUuid(record.tokenUuid).catch(() => null)
+        : null;
+      const vessel = record?.vesselUuid
+        ? await TamerCompanionManager.getVessel(record, this.tamer)
+        : null;
+      return { record, actor, token, vessel };
+    }));
+
     let stateChanged = false;
-    for (const record of records) {
-      if (!record?.tokenUuid) continue;
-      const token = await fromUuid(record.tokenUuid).catch(() => null);
-      if (!token) { record.tokenUuid = null; record.status = "in-vessel"; stateChanged = true; }
-    }
-    // Vessel records are also reconciled here so deleted/transferred Items do not leave dead associations.
-    for (const record of records) {
-      if (!record?.vesselUuid) continue;
-      const vessel = await TamerCompanionManager.getVessel(record, this.tamer);
-      if (!vessel) {
+    for (const entry of resolved) {
+      const record = entry.record;
+      if (record?.tokenUuid && !entry.token) {
+        record.tokenUuid = null;
+        record.status = "in-vessel";
+        entry.token = null;
+        stateChanged = true;
+      }
+      if (record?.vesselUuid && !entry.vessel) {
         record.vesselUuid = null;
         record.vesselName = "";
         stateChanged = true;
       }
     }
     if (stateChanged) await TamerCompanionManager.save(this.tamer, records);
-    const companions = await Promise.all(records.map(async (record, index) => { const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null; const token = record.tokenUuid ? await fromUuid(record.tokenUuid).catch(() => null) : null; const currentActor = token?.actor ?? actor; const progression = actor ? TamerCompanionManager.getProgression(record, actor, level) : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0 }; const splicerEnabled = TamerCompanionManager.isSplicer(this.tamer); const splicerActive = TamerCompanionManager.getSplicerAssignments(record); const splicerPending = TamerCompanionManager.getSplicerPendingAssignments(record); const vessel = await TamerCompanionManager.getVessel(record, this.tamer); return { index, slot: index + 1, name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion", img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg", type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature", hp: currentActor?.system?.attributes?.hp?.value ?? 0, hpMax: currentActor?.system?.attributes?.hp?.max ?? 0, ac: currentActor?.system?.attributes?.ac?.value ?? 0, vessel: vessel?.name ?? record.vesselName ?? "No vessel assigned", vesselImg: vessel?.img ?? "icons/svg/item-bag.svg", vesselEquipped: Boolean(vessel?.system?.equipped), linked: Boolean(actor), summoned: Boolean(token), progression, splicer: { enabled: splicerEnabled, active: splicerActive, pending: JSON.stringify(splicerActive) !== JSON.stringify(splicerPending), spent: TamerCompanionManager.getSplicerSpentPoints(record, splicerPending), pendingSpent: TamerCompanionManager.getSplicerSpentPoints(record, splicerPending) } }; }));
+
+    const getSpent = (assignments) => (assignments ?? []).reduce((total, entry) => {
+      const cost = splicerCosts?.get(String(entry?.id));
+      return total + (cost == null
+        ? 0
+        : cost * Math.max(0, Math.floor(Number(entry?.count ?? 0))));
+    }, 0);
+
+    const companions = resolved.map(({ record, actor, token, vessel }, index) => {
+      const currentActor = token?.actor ?? actor;
+      const progression = actor
+        ? TamerCompanionManager.getProgression(record, actor, level)
+        : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0, totalBonusHitDice: 0 };
+      const splicerActive = splicerEnabled
+        ? TamerCompanionManager.getSplicerAssignments(record)
+        : [];
+      const splicerPending = splicerEnabled
+        ? TamerCompanionManager.getSplicerPendingAssignments(record)
+        : [];
+      const activeSpent = splicerEnabled ? getSpent(splicerActive) : 0;
+      const pendingSpent = splicerEnabled ? getSpent(splicerPending) : 0;
+
+      return {
+        index,
+        slot: index + 1,
+        name: currentActor?.name ?? actor?.name ?? record.name ?? "Unlinked Companion",
+        img: currentActor?.img ?? actor?.img ?? "icons/svg/mystery-man.svg",
+        type: currentActor?.system?.details?.type?.value ?? currentActor?.system?.details?.type ?? "Creature",
+        hp: currentActor?.system?.attributes?.hp?.value ?? 0,
+        hpMax: currentActor?.system?.attributes?.hp?.max ?? 0,
+        ac: currentActor?.system?.attributes?.ac?.value ?? 0,
+        vessel: vessel?.name ?? record.vesselName ?? "No vessel assigned",
+        vesselImg: vessel?.img ?? "icons/svg/item-bag.svg",
+        vesselEquipped: Boolean(vessel?.system?.equipped),
+        linked: Boolean(actor),
+        summoned: Boolean(token),
+        progression,
+        splicer: {
+          enabled: splicerEnabled,
+          active: splicerActive,
+          pending: JSON.stringify(splicerActive) !== JSON.stringify(splicerPending),
+          spent: pendingSpent,
+          pendingSpent
+        }
+      };
+    });
     const soulBondFeature = TamerCompanionManager.getSoulBondFeature(this.tamer);
     const soulBond = soulBondFeature ? { current: Number(soulBondFeature.system?.uses?.value ?? 0), max: Number(soulBondFeature.system?.uses?.max ?? 0) } : { current: 0, max: 0 };
     return { tamer: { name: this.tamer.name, img: this.tamer.img, level }, pocketFamily: { slots, occupied: companions.length, empty: Array.from({ length: Math.max(0, slots - companions.length) }, (_, i) => i) }, limits: { size: TamerCompanionManager.getMaxCompanionSize(level), cr: TamerCompanionManager.getMaxCompanionCR(level) }, soulBond, paradigms: { splicer: TamerCompanionManager.isSplicer(this.tamer) }, companions };
@@ -176,12 +244,18 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       : this.getSplicerAssignments(record);
   }
 
-  static getSplicerSpentPoints(record, assignments = null) {
-    const registry = new Map(this.getSplicerAugmentRegistry().map(a => [String(a.id), a]));
+  static getSplicerSpentPoints(record, assignments = null, registry = null) {
+    const augmentRegistry = registry ?? new Map(
+      this.getSplicerAugmentRegistry().map(a => [String(a.id), a])
+    );
     const source = Array.isArray(assignments) ? assignments : this.getSplicerAssignments(record);
     return source.reduce((total, entry) => {
-      const augment = registry.get(String(entry?.id));
-      return total + (augment ? Number(augment.cost ?? 0) * Math.max(0, Math.floor(Number(entry?.count ?? 0))) : 0);
+      const augment = augmentRegistry instanceof Map
+        ? augmentRegistry.get(String(entry?.id))
+        : augmentRegistry.find?.(a => String(a.id) === String(entry?.id));
+      return total + (augment
+        ? Number(augment.cost ?? 0) * Math.max(0, Math.floor(Number(entry?.count ?? 0)))
+        : 0);
     }, 0);
   }
 
