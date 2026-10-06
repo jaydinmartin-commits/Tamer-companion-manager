@@ -21,7 +21,8 @@ class TamerCompanionSheetTab {
     // bodies. Keep the embedded Companion Manager inside that container so
     // the native header, ability scores, and collapsible portrait/sidebar
     // remain outside of it and continue to control the sheet layout.
-    return root.querySelector('[data-container-id="tabs"]')
+    return root.querySelector('[data-application-part="tabs"]')
+      ?? root.querySelector('[data-container-id="tabs"]')
       ?? root.querySelector(".tab-body")
       ?? root.querySelector(".sheet-body")
       ?? root.querySelector(".sheet-content");
@@ -114,7 +115,8 @@ class TamerCompanionSheetTab {
       return;
     }
 
-    const nav = root.querySelector("nav.sheet-tabs, nav.tabs, [role='tablist']");
+    const nav = root.querySelector('[data-application-part="tabs"] nav.tabs')
+      ?? root.querySelector("nav.sheet-tabs, nav.tabs, [role='tablist']");
     const body = this.findBody(root);
     if (!nav || !body) return;
 
@@ -403,10 +405,11 @@ class TamerCompanionSheetTab {
 }
 
 Hooks.once("init", () => {
-  // dnd5e v6 uses ActorSheetV2/ApplicationV2 sheets. Use the actor-specific
-  // ApplicationV2 render hook so this runs after the native actor sheet has
-  // produced its complete tab structure.
-  Hooks.on("renderActorSheetV2", (app, element) => {
+  // D&D 5e v6 Actor sheets are ApplicationV2 subclasses. The generic
+  // ApplicationV2 render hook is inherited by ActorSheetV2 and provides the
+  // final HTMLElement that we need to augment.
+  Hooks.on("renderApplicationV2", (app, element) => {
+    if (!app?.actor && app?.document?.documentName !== "Actor") return;
     void TamerCompanionSheetTab.attach(app, element);
   });
 });
