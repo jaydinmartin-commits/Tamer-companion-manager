@@ -17,15 +17,11 @@ class TamerCompanionSheetTab {
   }
 
   static findBody(root) {
-    // dnd5e v6 ApplicationV2 uses a dedicated container for all native tab
-    // bodies. Keep the embedded Companion Manager inside that container so
-    // the native header, ability scores, and collapsible portrait/sidebar
-    // remain outside of it and continue to control the sheet layout.
-    return root.querySelector('[data-application-part="tabs"]')
-      ?? root.querySelector('[data-container-id="tabs"]')
-      ?? root.querySelector(".tab-body")
-      ?? root.querySelector(".sheet-body")
-      ?? root.querySelector(".sheet-content");
+    // D&D 5e v6 ApplicationV2 renders the tab navigation as its own
+    // "tabs" part and each actual tab body as a separate ApplicationV2 part.
+    // The Companion Manager must therefore live at the sheet root, alongside
+    // those parts, rather than inside the navigation part.
+    return root;
   }
 
   static async renderCompanionImprovements(app, root, actor) {
@@ -38,7 +34,8 @@ class TamerCompanionSheetTab {
     const record = TamerCompanionManager.records(tamer).find(r => String(r?.id) === String(link.recordId));
     if (!record) return;
 
-    const targetTab = root.querySelector('[data-application-part="tabs"] .tab')
+    const targetTab = root.querySelector('[data-application-part="details"]')
+      ?? root.querySelector('[data-application-part="features"]')
       ?? root.querySelector('[data-container-id="tabs"] .tab')
       ?? root.querySelector(".tab-body .tab")
       ?? root.querySelector(".sheet-body .tab")
