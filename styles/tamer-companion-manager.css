@@ -1315,3 +1315,15 @@
   text-transform:none;
   letter-spacing:normal;
 }
+
+
+/* v0.1.106 — Pocket Family matches Companion Manager button typography */
+#tamer-companion-manager .tcm-family-summary .tcm-summary-label{
+  font-family:var(--font-primary, sans-serif) !important;
+  font-size:.82rem !important;
+  font-weight:600 !important;
+  line-height:1.1 !important;
+  text-transform:none !important;
+  letter-spacing:normal !important;
+  opacity:1 !important;
+}
