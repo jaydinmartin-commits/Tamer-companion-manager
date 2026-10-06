@@ -215,6 +215,37 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static getMaxCompanionSize(level) { if (level >= 13) return "Huge"; if (level >= 9) return "Large"; if (level >= 5) return "Medium"; return "Small"; }
   static getMaxCompanionCR(level) { if (level >= 19) return 6; if (level >= 16) return 5; if (level >= 13) return 4; if (level >= 10) return 3; if (level >= 7) return 2; if (level >= 4) return 1; return 0.5; }
+  static getCompanionEligibility(actor, tamer) {
+    const level = this.getTamerLevel(tamer);
+    const maxCR = this.getMaxCompanionCR(level);
+    const maxSize = this.getMaxCompanionSize(level);
+    const sizeOrder = { tiny: 0, small: 1, medium: 2, large: 3, huge: 4, gargantuan: 5 };
+    const rawSize = actor?.system?.traits?.size ?? actor?.system?.details?.size ?? "";
+    const size = String(rawSize ?? "").trim().toLowerCase();
+    const rawCR = actor?.system?.details?.cr ?? actor?.system?.details?.cr?.value ?? 0;
+    const cr = Number(rawCR);
+    const typeValue = actor?.system?.details?.type?.value ?? actor?.system?.details?.type ?? actor?.system?.traits?.creatureType ?? "";
+    const creatureType = typeof typeValue === "object"
+      ? String(typeValue.value ?? typeValue.type ?? "").trim().toLowerCase()
+      : String(typeValue).trim().toLowerCase();
+    const errors = [];
+    if (["humanoid", "giant", "swarm"].includes(creatureType)) errors.push("Creature type cannot be humanoid, giant, or swarm.");
+    if (Number.isFinite(cr) && cr > maxCR) errors.push("CR " + cr + " exceeds your maximum companion CR of " + maxCR + ".");
+    const maxRank = sizeOrder[String(maxSize).toLowerCase()] ?? 0;
+    const sizeRank = sizeOrder[size];
+    if (sizeRank !== undefined && sizeRank > maxRank) errors.push("Size " + size + " exceeds your maximum companion size of " + maxSize + ".");
+    return {
+      valid: errors.length === 0,
+      errors,
+      level,
+      maxCR,
+      maxSize,
+      creatureType,
+      cr: Number.isFinite(cr) ? cr : null,
+      size: size || "unknown"
+    };
+  }
+
 
   static isSplicer(actor) {
     return Boolean(actor?.items?.some(item => {
@@ -1599,6 +1630,16 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       return ui.notifications.warn(`${actor.name} is already linked to this Tamer.`);
     }
 
+    const eligibility = TamerCompanionManager.getCompanionEligibility(actor, this.tamer);
+    if (!eligibility.valid) {
+      console.warn("[Tamer Companion Manager] Companion link rejected by Tamer restrictions.", {
+        actor: actor.uuid,
+        tamer: this.tamer.uuid,
+        errors: eligibility.errors
+      });
+      return ui.notifications.warn(actor.name + " cannot become this Tamer's companion: " + eligibility.errors.join(" "));
+    }
+
     const tree=await TamerCompanionManager.findBespokeTree(actor);
     const baseHitDieFormula=TamerCompanionManager.getCompanionHitDieFormula(actor);
     const record={id:foundry.utils.randomID(),actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0,hitDiceApplied:0,hitDiceChoices:{},hitDiceBaseCount:baseHitDieFormula.count,hitDiceBaseDenomination:baseHitDieFormula.denomination};
@@ -1850,34 +1891,51 @@ class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _prepareContext() {
     const packs = TamerCompanionBrowser.getConfiguredPacks();
-    if (!packs.length) return { packs: [], selectedSource: "all", entries: [] };
+    if (!packs.length) return { packs: [], selectedSource: "all", entries: [], eligibleCount: 0, totalCount: 0, limits: null };
     if (this.source !== "all" && !packs.some(pack => pack.collection === this.source)) this.source = "all";
-
     const selectedPacks = this.source === "all" ? packs : packs.filter(pack => pack.collection === this.source);
     const entries = [];
+    let totalCount = 0;
     for (const pack of selectedPacks) {
       try {
-        const index = await pack.getIndex({ fields: ["name", "img", "type"] });
+        const index = await pack.getIndex({ fields: ["name","img","type","system.details.cr","system.details.type","system.traits.size"] });
         for (const entry of index.values()) {
+          totalCount++;
+          const actorLike = {
+            system: {
+              details: { cr: entry.system?.details?.cr, type: entry.system?.details?.type },
+              traits: { size: entry.system?.traits?.size }
+            }
+          };
+          const eligibility = TamerCompanionManager.getCompanionEligibility(actorLike, this.tamer);
           entries.push({
             id: entry._id,
             name: entry.name ?? "Unnamed Actor",
             img: entry.img ?? "icons/svg/mystery-man.svg",
-            type: entry.type ?? "",
+            type: eligibility.creatureType || entry.type || "Creature",
+            cr: eligibility.cr,
+            size: eligibility.size,
+            eligible: eligibility.valid,
+            restrictionReason: eligibility.errors.join(" "),
             source: pack.collection,
-            sourceTitle: pack.title
+            sourceTitle: pack.title,
+            search: String(entry.name ?? "") + " " + String(pack.title ?? "") + " " + String(eligibility.creatureType ?? "")
           });
         }
       } catch (error) {
         console.warn("[Tamer Companion Manager] Could not index companion compendium.", pack.collection, error);
       }
     }
-    entries.sort((a,b) => a.name.localeCompare(b.name) || a.sourceTitle.localeCompare(b.sourceTitle));
+    entries.sort((a,b) => Number(b.eligible) - Number(a.eligible) || a.name.localeCompare(b.name) || a.sourceTitle.localeCompare(b.sourceTitle));
+    const level = TamerCompanionManager.getTamerLevel(this.tamer);
     return {
       selectedAll: this.source === "all",
       packs: packs.map(pack => ({ collection: pack.collection, title: pack.title, selected: this.source === pack.collection })),
       selectedSource: this.source,
-      entries
+      entries,
+      eligibleCount: entries.filter(entry => entry.eligible).length,
+      totalCount,
+      limits: { cr: TamerCompanionManager.getMaxCompanionCR(level), size: TamerCompanionManager.getMaxCompanionSize(level) }
     };
   }
 
@@ -1918,66 +1976,25 @@ class TamerCompanionBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
     const pack = game.packs.get(packCollection);
     if (!TamerCompanionBrowser.isActorPack(pack)) return ui.notifications.error("That companion source is no longer available.");
     if (!game.user.isGM && !pack.visible) return ui.notifications.warn("You do not have permission to access that compendium.");
-    if (!game.user.isGM && !game.user.can("ACTOR_CREATE")) {
-      return ui.notifications.error("You do not have permission to create World Actors. The companion cannot be imported.");
-    }
+    if (!game.user.isGM && !game.user.can("ACTOR_CREATE")) return ui.notifications.error("You do not have permission to create World Actors. The companion cannot be imported.");
 
-    let actor = null;
     try {
-      // Resolve the actual Actor first. This avoids relying on a compendium
-      // index entry being directly importable when a pack uses a custom index.
       const source = await pack.getDocument(documentId);
-      if (!source) {
-        console.error("[Tamer Companion Manager] Companion compendium entry could not be resolved.", {
-          pack: pack.collection,
-          documentId
-        });
-        return ui.notifications.error("The selected creature could not be loaded from that compendium.");
-      }
-      if (source.documentName !== "Actor") {
-        console.error("[Tamer Companion Manager] Selected companion entry is not an Actor.", {
-          pack: pack.collection,
-          documentId,
-          documentName: source.documentName
-        });
-        return ui.notifications.error("The selected compendium entry is not an Actor.");
-      }
-
-      // Use Foundry's native WorldCollection importer with the resolved
-      // Actor. This follows the same compendium-cleaning rules as the
-      // normal Foundry import workflow.
-      actor = await game.actors.importDocument(source, { keepId: false });
-      if (!actor) {
-        return ui.notifications.error("The companion could not be imported into the World.");
-      }
-    } catch (error) {
-      console.error("[Tamer Companion Manager] Failed to import companion from compendium.", {
-        error,
-        pack: pack.collection,
-        documentId
-      });
-      return ui.notifications.error(
-        "The companion could not be imported from that compendium. See the browser console for details."
-      );
-    }
-
-    try {
+      if (!source || source.documentName !== "Actor") return ui.notifications.error("The selected compendium entry is not an Actor.");
+      const eligibility = TamerCompanionManager.getCompanionEligibility(source, this.tamer);
+      if (!eligibility.valid) return ui.notifications.warn(source.name + " cannot become this Tamer's companion: " + eligibility.errors.join(" "));
+      const records = TamerCompanionManager.records(this.tamer);
+      const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(this.tamer));
+      if (records.length >= max) return ui.notifications.warn("No Pocket Family slot is available.");
+      if (records.some(record => record.actorUuid === source.uuid)) return ui.notifications.warn(source.name + " is already linked to this Tamer.");
+      const actor = await game.actors.importDocument(source, { keepId: false });
+      if (!actor) return ui.notifications.error("The companion could not be imported into the World.");
       await this.close();
       const linked = await this.manager?._linkCompanion(actor);
-      if (linked === false) {
-        console.error("[Tamer Companion Manager] Imported companion could not be linked.", {
-          actor: actor.uuid,
-          name: actor.name
-        });
-        return ui.notifications.error(
-          "The creature was imported, but could not be bonded to this Tamer."
-        );
-      }
+      if (linked === false) return ui.notifications.error("The creature was imported, but could not be bonded to this Tamer.");
     } catch (error) {
-      console.error("[Tamer Companion Manager] Imported companion could not be linked.", error);
-      ui.notifications.error(
-        "The creature was imported, but could not be bonded to this Tamer. See the console for details."
-      );
+      console.error("[Tamer Companion Manager] Failed to import companion.", { error, pack: pack.collection, documentId });
+      return ui.notifications.error("The companion could not be imported. See the browser console for details.");
     }
   }
 }
