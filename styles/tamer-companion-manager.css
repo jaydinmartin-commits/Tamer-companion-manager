@@ -1303,3 +1303,15 @@
     margin-top:-3px;
   }
 }
+
+
+/* v0.1.105 — Match Pocket Family typography to native toolbar buttons */
+.tcm-family-summary,
+.tcm-family-summary .tcm-summary-label{
+  font-family:var(--font-primary,sans-serif);
+}
+.tcm-family-summary .tcm-summary-label{
+  font-weight:500;
+  text-transform:none;
+  letter-spacing:normal;
+}
