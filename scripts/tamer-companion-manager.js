@@ -116,16 +116,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const progression = actor
         ? TamerCompanionManager.getProgression(record, actor, level)
         : { target: 0, chosen: 0, pending: 0, bonusHitDice: 0, asiHitDice: 0, totalBonusHitDice: 0 };
-      const improvementEntries = (record?.improvements ?? []).filter(entry => !entry?.isBonus);
-      const improvementGroups = new Map();
-      for (const entry of improvementEntries) {
-        const key = String(entry.sourceUuid ?? entry.name ?? entry.itemUuid ?? "");
-        if (!key) continue;
-        const group = improvementGroups.get(key) ?? { name: entry.name ?? "Improvement", count: 0, entries: [] };
-        group.count += 1;
-        group.entries.push(entry);
-        improvementGroups.set(key, group);
-      }
       const splicerActive = splicerEnabled
         ? TamerCompanionManager.getSplicerAssignments(record)
         : [];
@@ -150,11 +140,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         linked: Boolean(actor),
         summoned: Boolean(token),
         progression,
-        improvements: [...improvementGroups.values()].map(group => ({
-          name: group.name,
-          count: group.count,
-          label: group.count > 1 ? group.name + " ×" + group.count : group.name
-        })),
         splicer: {
           enabled: splicerEnabled,
           active: splicerActive,
