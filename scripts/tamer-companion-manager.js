@@ -1439,10 +1439,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static async summon(tamer, record) {
-    if (!canvas?.scene) return ui.notifications.warn("A scene must be active.");
+    if (!canvas?.scene) { ui.notifications.warn("A scene must be active."); return false; }
     const vessel = await this.getVessel(record, tamer);
-    if (!vessel) return ui.notifications.warn("This companion has no valid vessel assigned. Assign its vessel to the companion first.");
-    if (vessel.system?.equipped !== true) return ui.notifications.warn(`${vessel.name} must be equipped before this companion can be summoned.`);
+    if (!vessel) { ui.notifications.warn("This companion has no valid vessel assigned. Assign its vessel to the companion first."); return false; }
+    if (vessel.system?.equipped !== true) { ui.notifications.warn(`${vessel.name} must be equipped before this companion can be summoned.`); return false; }
     const actor = record.actorUuid ? await fromUuid(record.actorUuid).catch(() => null) : null;
     if (!actor) return ui.notifications.error("The companion Actor could not be found.");
     const records = this.records(tamer);
