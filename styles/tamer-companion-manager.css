@@ -1554,3 +1554,40 @@
   .tcm-config-footer{grid-template-columns:1fr 1fr}
   .tcm-config-footer span{display:none}
 }
+
+
+/* Repeatable improvement quantity controls */
+.tcm-improvement-quantity{
+  display:grid;
+  grid-template-columns:24px 24px 24px;
+  align-items:center;
+  gap:2px;
+  margin-left:auto;
+  flex:0 0 auto;
+}
+.tcm-improvement-quantity button{
+  width:24px;
+  height:24px;
+  padding:0;
+  border:0;
+  border-radius:3px;
+  color:var(--tcm-native-muted);
+  background:transparent;
+  font-size:.9rem;
+  line-height:1;
+}
+.tcm-improvement-quantity button:hover:not(:disabled){
+  color:var(--tcm-native-gold);
+  background:rgba(217,164,65,.08);
+}
+.tcm-improvement-quantity button:disabled{opacity:.3}
+.tcm-improvement-quantity strong{
+  text-align:center;
+  font-size:.68rem;
+  min-width:24px;
+}
+.tcm-improvement-quantity[data-limit="single"]{}
+.tcm-advancement-option.is-selected .tcm-advancement-icon{
+  outline:1px solid var(--tcm-native-gold);
+  outline-offset:1px;
+}
