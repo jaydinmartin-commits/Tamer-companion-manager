@@ -881,7 +881,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
               if (![...uuids].some(uuid => selectedNow.has(uuid))) missing.push(name);
             }
             const current = Math.max(0, Number(option.dataset.count ?? 0));
-            const limit = option.dataset.limit === 'repeatable' ? Math.max(1, progression.target) : 1;
+            const limit = Math.max(1, Number(option.dataset.limitCount ?? (option.dataset.limit === 'repeatable' ? progression.target : 1)));
             const unavailable = current === 0 && missing.length > 0;
             option.hidden = unavailable;
             option.classList.toggle('is-prerequisite-hidden', unavailable);
