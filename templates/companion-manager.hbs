@@ -59,12 +59,6 @@
           <div class="tcm-vessel-control {{#unless vessel}}is-unassigned{{/unless}}">
             <i class="fa-solid fa-box-open" aria-hidden="true"></i>
             <span class="tcm-vessel-label">Vessel</span>
-            <select data-tcm-vessel data-index="{{index}}" title="{{#if vessel}}Replace vessel{{else}}Assign vessel{{/if}}">
-              <option value="">{{#if vessel}}Unassign{{else}}Assign Vessel{{/if}}</option>
-              {{#each vessels}}
-                <option value="{{uuid}}" {{#if selected}}selected{{/if}}>{{name}}{{#if equipped}} — Equipped{{/if}}</option>
-              {{/each}}
-            </select>
             {{#if vessel}}
               <button type="button" class="tcm-vessel-clear" data-action="clearVessel" data-index="{{index}}" title="Unbind vessel" aria-label="Unbind vessel">
                 <i class="fa-solid fa-xmark" aria-hidden="true"></i>
