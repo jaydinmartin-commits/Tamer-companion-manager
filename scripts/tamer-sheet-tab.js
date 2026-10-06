@@ -139,12 +139,13 @@ class TamerCompanionSheetTab {
     // repeated UUID resolution, flag cloning, template rendering, and DOM
     // replacement while the native sheet is being used.
     if (controller._tcmTabActive) {
-      // Native ActorSheetV2 may render repeatedly while the embedded tab is
-      // visible. Do not rebuild the Companion Manager for every native render.
-      // Actions and explicit refreshes still call render() when the manager
-      // actually needs new data.
+      // ApplicationV2 can replace the tab body while the controller object
+      // survives. In that case _tcmRendered may still be true even though the
+      // new content element has never been populated.
       const actorChanged = controller._tcmRenderedActorUuid !== actor.uuid;
-      if (actorChanged || !controller._tcmRendered) {
+      const contentReplaced = controller._tcmSheetContent !== content;
+      const contentEmpty = !content.querySelector(".tcm-root");
+      if (actorChanged || contentReplaced || !controller._tcmRendered || contentEmpty) {
         await this.activate(root, nav, body, tab, content, controller);
       } else {
         this.activateVisualState(root, tab, content);
@@ -222,6 +223,9 @@ class TamerCompanionSheetTab {
         const max = TamerCompanionManager.getPocketFamilySlots(TamerCompanionManager.getTamerLevel(controller.tamer));
         if (records.length >= max) return ui.notifications.warn("No Pocket Family slot is available.");
         await TamerCompanionManager._onAddCompanion.call(controller);
+        // The browser performs the import and bond asynchronously. Rebuild the
+        // embedded manager from the Tamer's persisted flag once the browser closes.
+        await this.render(controller);
         return;
       }
 
