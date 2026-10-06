@@ -1,35 +1,51 @@
 <form id="tcm-splicer-augment-registry" class="tcm-splicer-augment-registry">
-  <header class="tcm-splicer-registry-header">
-    <p>Link the Splicer augment Features/Items already created in your world. Drag an Item onto its row or enter its UUID. Costs and repeatability are configured here; the linked Item remains the source for the actual description and mechanics.</p>
+  <header class="tcm-config-header">
+    <div>
+      <h2>Splicer Augments</h2>
+      <p>Connect each Splicer augment to the Feature or Item that supplies its rules. Configure its cost and application limits here.</p>
+    </div>
   </header>
-  <div class="tcm-splicer-registry-list">
+
+  <div class="tcm-config-list">
     {{#each augments}}
-      <section class="tcm-splicer-registry-row" data-id="{{id}}" data-uuid="{{uuid}}">
-        <div class="tcm-splicer-registry-row-head">
+      <section class="tcm-config-row" data-id="{{id}}" data-uuid="{{uuid}}">
+        <div class="tcm-config-row-heading">
           <img data-role="icon" src="{{img}}" alt="">
-          <div class="tcm-splicer-registry-title"><strong>{{name}}</strong><span>{{uuid}}</span></div>
-          <button type="button" data-action="remove" title="Remove augment"><i class="fa-solid fa-trash"></i></button>
+          <div>
+            <strong>{{name}}</strong>
+            <small>{{#if uuid}}Linked Feature{{else}}Not linked{{/if}}</small>
+          </div>
+          <button type="button" data-action="remove" title="Remove augment" aria-label="Remove {{name}}">
+            <i class="fa-solid fa-trash"></i>
+          </button>
         </div>
-        <div class="tcm-splicer-registry-grid">
-          <label>Feature UUID<input name="uuid" type="text" value="{{uuid}}" placeholder="Item...."></label>
+
+        <div class="tcm-config-fields">
+          <label class="wide">Feature UUID<input name="uuid" type="text" value="{{uuid}}" placeholder="Drag an Item here or enter its UUID"></label>
           <label>Cost<input name="cost" type="number" min="0" step="1" value="{{cost}}"></label>
           <label>Max Applications<input name="maxCount" type="number" min="1" step="1" value="{{maxCount}}"></label>
           <label>2nd Application Level<input name="minLevelForSecond" type="number" min="0" step="1" value="{{minLevelForSecond}}"></label>
-          <label>Exclusive Group<input name="exclusiveGroup" type="text" value="{{exclusiveGroup}}"></label>
+          <label>Exclusive Group<input name="exclusiveGroup" type="text" value="{{exclusiveGroup}}" placeholder="Optional"></label>
         </div>
-        <div class="tcm-splicer-registry-actions">
+
+        <div class="tcm-config-options">
           <label><input name="repeatable" type="checkbox" {{checked repeatable}}> Repeatable</label>
           <label><input name="growth" type="checkbox" {{checked growth}}> Growth augment</label>
           <button type="button" data-action="clearLink">Clear Link</button>
         </div>
-        <details><summary>Linked Feature Description</summary><div class="tcm-splicer-linked-description">{{{description}}}</div></details>
+
+        <details>
+          <summary>View linked feature description</summary>
+          <div class="tcm-config-description">{{{description}}}</div>
+        </details>
       </section>
     {{/each}}
   </div>
-  <footer class="form-footer">
+
+  <footer class="tcm-config-footer">
     <button type="button" data-action="addRow"><i class="fa-solid fa-plus"></i> Add Augment</button>
-    <span class="flex-spacer"></span>
+    <span></span>
     <button type="button" data-action="cancel">Cancel</button>
-    <button type="button" data-action="save"><i class="fa-solid fa-save"></i> Save Registry</button>
+    <button type="button" data-action="save" class="primary"><i class="fa-solid fa-save"></i> Save</button>
   </footer>
 </form>
