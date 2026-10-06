@@ -78,6 +78,11 @@ class TamerCompanionSheetTab {
     const total = entries.length;
     const target = Math.max(0, TamerCompanionManager.getProgression(record, actor, TamerCompanionManager.getTamerLevel(tamer)).target);
     const titleCount = target ? `${total}/${target}` : String(total);
+    const repeatable = [...grouped.values()].filter(entry => entry.count > 1);
+    const repeatableOptions = repeatable
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(entry => `<option value="${foundry.utils.escapeHTML(entry.name)}">${foundry.utils.escapeHTML(entry.name)} ×${entry.count}</option>`)
+      .join("");
 
     section.innerHTML = `
       <summary>
@@ -85,6 +90,13 @@ class TamerCompanionSheetTab {
         <strong>${titleCount}</strong>
       </summary>
       <div class="tcm-companion-improvements-body">
+        ${repeatableOptions ? `
+          <label class="tcm-companion-repeatable-select">
+            <span>Repeatable Improvements</span>
+            <select aria-label="Repeatable Improvements">
+              ${repeatableOptions}
+            </select>
+          </label>` : ""}
         ${rows ? `<ul>${rows}</ul>` : `<p>No selected improvements.</p>`}
         ${bonusRows ? `<div class="tcm-companion-improvements-bonus"><small>Bespoke</small><ul>${bonusRows}</ul></div>` : ""}
       </div>`;
