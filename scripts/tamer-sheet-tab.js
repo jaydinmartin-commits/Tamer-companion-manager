@@ -92,12 +92,15 @@ class TamerCompanionSheetTab {
   static async attach(app, element) {
     const root = this.rootOf(app, element);
     const actor = this.actorOf(app);
-    if (!root || !actor || !TamerCompanionManager.isTamer(actor)) return;
+    if (!root || !actor) return;
     if (!(actor.isOwner || game.user.isGM)) return;
 
     // Companion Actors get their own lightweight Improvements disclosure on
     // the native character sheet. This is separate from the locked manager UI.
-    await this.renderCompanionImprovements(app, root, actor);
+    if (!TamerCompanionManager.isTamer(actor)) {
+      await this.renderCompanionImprovements(app, root, actor);
+      return;
+    }
 
     const nav = root.querySelector("nav.sheet-tabs, nav.tabs, [role='tablist']");
     const body = this.findBody(root);
