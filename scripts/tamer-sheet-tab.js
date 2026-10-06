@@ -132,6 +132,11 @@ class TamerCompanionSheetTab {
     controller.tamer = actor;
     controller._tcmSheetContent = content;
     controller._tcmSheetApp = app;
+    controller._tcmRefresh = async () => {
+      if (!controller._tcmSheetContent?.isConnected) return false;
+      await this.render(controller);
+      return true;
+    };
 
     // Do not rebuild the Companion Manager every time the native Actor Sheet
     // renders. ActorSheetV2 can re-render for many unrelated document/UI
