@@ -17,13 +17,14 @@ class TamerCompanionSheetTab {
   }
 
   static findBody(root) {
-    // D&D 5e v6 renders each primary tab as its own ApplicationV2 part.
-    // Use the Details tab-body as the stable host for our custom tab content;
-    // the existing sheet CSS then hides the native tab body while the
-    // Companion Manager is active without modifying ApplicationV2's tab state.
-    return root.querySelector('[data-application-part="details"]')
-      ?? root.querySelector('[data-container-id="tabs"]')
-      ?? root.querySelector(".tab-body");
+    // dnd5e v6 ApplicationV2 uses a dedicated container for all native tab
+    // bodies. Keep the embedded Companion Manager inside that container so
+    // the native header, ability scores, and collapsible portrait/sidebar
+    // remain outside of it and continue to control the sheet layout.
+    return root.querySelector('[data-container-id="tabs"]')
+      ?? root.querySelector(".tab-body")
+      ?? root.querySelector(".sheet-body")
+      ?? root.querySelector(".sheet-content");
   }
 
   static async renderCompanionImprovements(app, root, actor) {
@@ -36,10 +37,8 @@ class TamerCompanionSheetTab {
     const record = TamerCompanionManager.records(tamer).find(r => String(r?.id) === String(link.recordId));
     if (!record) return;
 
-    const targetTab = root.querySelector('[data-application-part="details"]')
-      ?? root.querySelector('[data-application-part="features"]')
-      ?? root.querySelector('[data-container-id="tabs"]')
-      ?? root.querySelector(".tab-body")
+    const targetTab = root.querySelector('[data-container-id="tabs"] .tab')
+      ?? root.querySelector(".tab-body .tab")
       ?? root.querySelector(".sheet-body .tab")
       ?? root.querySelector(".sheet-content .tab");
     if (!targetTab) return;
@@ -115,8 +114,7 @@ class TamerCompanionSheetTab {
       return;
     }
 
-    const nav = root.querySelector('[data-application-part="tabs"] nav.tabs')
-      ?? root.querySelector("nav.sheet-tabs, nav.tabs, [role='tablist']");
+    const nav = root.querySelector("nav.sheet-tabs, nav.tabs, [role='tablist']");
     const body = this.findBody(root);
     if (!nav || !body) return;
 
@@ -405,11 +403,5 @@ class TamerCompanionSheetTab {
 }
 
 Hooks.once("init", () => {
-  // D&D 5e v6 Actor sheets are ApplicationV2 subclasses. The generic
-  // ApplicationV2 render hook is inherited by ActorSheetV2 and provides the
-  // final HTMLElement that we need to augment.
-  Hooks.on("renderApplicationV2", (app, element) => {
-    if (!app?.actor && app?.document?.documentName !== "Actor") return;
-    void TamerCompanionSheetTab.attach(app, element);
-  });
+  Hooks.on("renderActorSheetV2", (app, element) => TamerCompanionSheetTab.attach(app, element));
 });
