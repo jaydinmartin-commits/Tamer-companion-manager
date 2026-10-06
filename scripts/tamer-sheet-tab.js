@@ -27,11 +27,77 @@ class TamerCompanionSheetTab {
       ?? root.querySelector(".sheet-content");
   }
 
+  static async renderCompanionImprovements(app, root, actor) {
+    const link = actor?.getFlag(MODULE_ID, "companionLink");
+    if (!link?.tamerUuid || !link?.recordId) return;
+
+    const tamer = await fromUuid(link.tamerUuid).catch(() => null);
+    if (!tamer || !TamerCompanionManager.isTamer(tamer)) return;
+
+    const record = TamerCompanionManager.records(tamer).find(r => String(r?.id) === String(link.recordId));
+    if (!record) return;
+
+    const targetTab = root.querySelector('[data-container-id="tabs"] .tab')
+      ?? root.querySelector(".tab-body .tab")
+      ?? root.querySelector(".sheet-body .tab")
+      ?? root.querySelector(".sheet-content .tab");
+    if (!targetTab) return;
+
+    let section = targetTab.querySelector("[data-tcm-companion-improvements]");
+    if (!section) {
+      section = document.createElement("details");
+      section.className = "tcm-companion-improvements-sheet";
+      section.dataset.tcmCompanionImprovements = "true";
+      targetTab.prepend(section);
+    }
+
+    const entries = (record.improvements ?? []).filter(entry => !entry?.isBonus);
+    const grouped = new Map();
+    for (const entry of entries) {
+      const key = String(entry?.sourceUuid ?? entry?.name ?? entry?.itemUuid ?? "");
+      if (!key) continue;
+      const existing = grouped.get(key);
+      if (existing) existing.count += 1;
+      else grouped.set(key, { name: String(entry?.name ?? "Improvement"), count: 1 });
+    }
+
+    const rows = [...grouped.values()]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(entry => `<li><span>${foundry.utils.escapeHTML(entry.name)}</span>${entry.count > 1 ? `<strong>×${entry.count}</strong>` : ""}</li>`)
+      .join("");
+
+    const bonusEntries = (record.improvements ?? []).filter(entry => entry?.isBonus);
+    const bonusRows = [...new Map(bonusEntries.map(entry => [
+      String(entry?.sourceUuid ?? entry?.name ?? entry?.itemUuid ?? foundry.utils.randomID()),
+      String(entry?.name ?? "Improvement")
+    ])).values()]
+      .sort((a, b) => a.localeCompare(b))
+      .map(name => `<li><span>${foundry.utils.escapeHTML(name)}</span><em>Granted</em></li>`)
+      .join("");
+
+    const total = entries.length;
+    const target = Math.max(0, TamerCompanionManager.getProgression(record, actor, TamerCompanionManager.getTamerLevel(tamer)).target);
+    const titleCount = target ? `${total}/${target}` : String(total);
+
+    section.innerHTML = `
+      <summary>
+        <span><i class="fa-solid fa-arrow-up-right-dots" aria-hidden="true"></i> Improvements</span>
+        <strong>${titleCount}</strong>
+      </summary>
+      <div class="tcm-companion-improvements-body">
+        ${rows ? `<ul>${rows}</ul>` : `<p>No selected improvements.</p>`}
+        ${bonusRows ? `<div class="tcm-companion-improvements-bonus"><small>Bespoke</small><ul>${bonusRows}</ul></div>` : ""}
+      </div>`;
+  }
   static async attach(app, element) {
     const root = this.rootOf(app, element);
     const actor = this.actorOf(app);
     if (!root || !actor || !TamerCompanionManager.isTamer(actor)) return;
     if (!(actor.isOwner || game.user.isGM)) return;
+
+    // Companion Actors get their own lightweight Improvements disclosure on
+    // the native character sheet. This is separate from the locked manager UI.
+    await this.renderCompanionImprovements(app, root, actor);
 
     const nav = root.querySelector("nav.sheet-tabs, nav.tabs, [role='tablist']");
     const body = this.findBody(root);
