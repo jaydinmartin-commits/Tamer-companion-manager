@@ -1495,6 +1495,7 @@
 .tcm-config-footer span:first-child:not(:last-child){font-size:.6rem;color:var(--tcm-native-muted)}
 
 #tcm-companion-browser .tcm-companion-browser-root{
+  display:flex;flex-direction:column;height:100%;min-height:0;
   padding:0;gap:0;background:var(--color-cool-5,#1f1f24)
 }
 #tcm-companion-browser .tcm-browser-header{
