@@ -40,6 +40,22 @@
             <div><span>AC</span><strong>{{ac}}</strong></div>
           </div>
 
+          {{#if improvements.length}}
+            <details class="tcm-improvements-summary">
+              <summary>
+                <span><i class="fa-solid fa-graduation-cap"></i> Improvements</span>
+                <strong>{{progression.chosen}} / {{progression.target}}</strong>
+              </summary>
+              <div class="tcm-improvements-list">
+                {{#each improvements}}
+                  <div class="tcm-improvement-summary-row">
+                    <span>{{label}}</span>
+                  </div>
+                {{/each}}
+              </div>
+            </details>
+          {{/if}}
+
           <div class="tcm-vessel-control {{#unless vessel}}is-unassigned{{/unless}}">
             <i class="fa-solid fa-box-open" aria-hidden="true"></i>
             <span class="tcm-vessel-label">Vessel</span>
