@@ -131,7 +131,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       const splicerPending = splicerEnabled
         ? TamerCompanionManager.getSplicerPendingAssignments(record)
         : [];
-      const activeSpent = splicerEnabled ? getSpent(splicerActive) : 0;
       const pendingSpent = splicerEnabled ? getSpent(splicerPending) : 0;
 
       return {
@@ -776,18 +775,22 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           document.body.appendChild(tooltip);
         }
 
+        let tooltipFrame = 0;
+        let pendingPointer = null;
+        let tooltipSize = { width: 0, height: 0 };
+        let activeOption = null;
+
         const hideTooltip = () => {
           tooltip.style.display = "none";
           tooltip.setAttribute("aria-hidden", "true");
           pendingPointer = null;
+          activeOption?.removeEventListener("mousemove", moveTooltip);
+          activeOption = null;
           if (tooltipFrame) {
             cancelAnimationFrame(tooltipFrame);
             tooltipFrame = 0;
           }
         };
-
-        let tooltipFrame = 0;
-        let pendingPointer = null;
 
         const moveTooltip = event => {
           if (tooltip.style.display === "none") return;
@@ -799,12 +802,12 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
             const { x, y } = pendingPointer;
             const offset = 14;
-            const rect = tooltip.getBoundingClientRect();
+            const { width, height } = tooltipSize;
             let left = x + offset;
             let top = y + offset;
 
-            if (left + rect.width > window.innerWidth - 8) left = x - rect.width - offset;
-            if (top + rect.height > window.innerHeight - 8) top = y - rect.height - offset;
+            if (left + width > window.innerWidth - 8) left = x - width - offset;
+            if (top + height > window.innerHeight - 8) top = y - height - offset;
 
             tooltip.style.left = `${Math.max(8, left)}px`;
             tooltip.style.top = `${Math.max(8, top)}px`;
@@ -814,24 +817,23 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         const showTooltip = (event, option) => {
           const html = option?.dataset?.tcmTooltip || "";
           if (!html) return;
+          activeOption = option;
           tooltip.innerHTML = html;
           tooltip.style.display = "block";
           tooltip.setAttribute("aria-hidden", "false");
+          const rect = tooltip.getBoundingClientRect();
+          tooltipSize = { width: rect.width, height: rect.height };
           moveTooltip(event);
         };
 
-        // Delegate the events from the picker itself. This is more reliable
-        // across Foundry's DialogV2 application/shadow-DOM rendering than
-        // attaching individual pointer handlers to every row.
+        // Only process pointer movement while hovering an improvement row.
         root.addEventListener("mouseover", event => {
           const option = event.target.closest?.(".tcm-advancement-option");
           if (!option || !root.contains(option)) return;
+          if (activeOption === option) return;
+          activeOption?.removeEventListener("mousemove", moveTooltip);
           showTooltip(event, option);
-        });
-
-        root.addEventListener("mousemove", event => {
-          const option = event.target.closest?.(".tcm-advancement-option");
-          if (option && root.contains(option)) moveTooltip(event);
+          option.addEventListener("mousemove", moveTooltip);
         });
 
         root.addEventListener("mouseout", event => {
@@ -839,6 +841,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           if (!option || !root.contains(option)) return;
           const next = event.relatedTarget;
           if (next && option.contains(next)) return;
+          option.removeEventListener("mousemove", moveTooltip);
+          if (activeOption === option) activeOption = null;
           hideTooltip();
         });
 
@@ -2390,8 +2394,7 @@ Hooks.once("init", () => {
       // Consume the captured transition after synchronization. Later duplicate
       // advancement-complete hooks have no level transition to trigger a picker.
       TamerCompanionManager._pendingLevelTransitions.delete(transitionKey);
-
-              await TamerCompanionManager.refreshOpenManagers(actor);
+      await TamerCompanionManager.refreshOpenManagers(actor);
     } catch (error) {
       console.error("[Tamer Companion Manager] Companion advancement synchronization failed.", error);
       ui.notifications.error("Companion advancement could not be synchronized. See the console for details.");
@@ -2403,7 +2406,7 @@ Hooks.once("init", () => {
     if (!(actor.isOwner || game.user.isGM)) return;
     try {
       if (await TamerCompanionManager.syncCompanionHitDice(actor)) {
-                  await TamerCompanionManager.refreshOpenManagers(actor);
+        await TamerCompanionManager.refreshOpenManagers(actor);
       }
     } catch (error) {
       console.error("[Tamer Companion Manager] Companion Hit Die synchronization failed.", error);
@@ -2446,7 +2449,6 @@ Hooks.once("init", () => {
     const profRelevant =
       levelChanged ||
       Boolean(systemChanges?.attributes?.prof) ||
-      Boolean(systemChanges?.details?.level) ||
       Boolean(systemChanges?.classes);
 
     if (!profRelevant && !abilitiesChanged) return;
