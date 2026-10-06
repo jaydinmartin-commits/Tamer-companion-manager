@@ -132,6 +132,16 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         ? TamerCompanionManager.getSplicerPendingAssignments(record)
         : [];
       const pendingSpent = splicerEnabled ? getSpent(splicerPending) : 0;
+      const improvementCounts = TamerCompanionManager.getImprovementCountMap(
+        (record?.improvements ?? []).filter(entry => !entry?.isBonus)
+      );
+      const repeatableImprovements = [];
+      for (const [sourceUuid, count] of improvementCounts) {
+        const sourceItem = await fromUuid(sourceUuid).catch(() => null);
+        if (!sourceItem) continue;
+        if (TamerCompanionManager.getImprovementSelectionLimit(sourceItem, actor, level) <= 1) continue;
+        repeatableImprovements.push({ uuid: sourceUuid, name: sourceItem.name, count });
+      }
 
       return {
         index,
@@ -148,6 +158,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         linked: Boolean(actor),
         summoned: Boolean(token),
         progression,
+        repeatableImprovements,
         splicer: {
           enabled: splicerEnabled,
           active: splicerActive,
@@ -713,6 +724,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
                 data-uuid="${esc(uuid)}"
                 data-count="${currentCount}"
                 data-limit="${repeatable ? 'repeatable' : 'single'}"
+                data-limit-count="${limit}"
                 ${initiallyHidden ? 'hidden' : ''}>
                 <img class="tcm-advancement-icon" src="${esc(item.img || 'icons/svg/item-bag.svg')}" alt="">
                 <span class="tcm-advancement-text">
@@ -729,6 +741,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         </div>
       </section>`;
 
+
+    let repeatSubmission = false;
 
     const content = `
       <div class="tcm-advancement">
@@ -754,7 +768,8 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             const n = Math.max(0, Number(option.dataset.count ?? 0));
             for (let i = 0; i < n; i++) values.push(option.dataset.uuid);
           }
-          if (values.length > progression.target) {
+          const selectedSlots = new Set(values).size;
+          if (!repeatSubmission && selectedSlots > progression.target) {
             ui.notifications.warn(`This companion can have at most ${progression.target} selected improvement${progression.target === 1 ? "" : "s"}.`);
             return null;
           }
@@ -852,7 +867,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         const updateCount = () => {
           const options = [...root.querySelectorAll('.tcm-advancement-option[data-tcm-improvement]')];
           const counts = new Map(options.map(option => [option.dataset.uuid, Math.max(0, Number(option.dataset.count ?? 0))]));
-          const total = [...counts.values()].reduce((sum, n) => sum + n, 0);
+          const total = [...counts.values()].filter(n => n > 0).length;
           if (count) count.textContent = total;
           for (const option of options) {
             let prereq = { level: 0, names: [] };
@@ -876,7 +891,10 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
             const value = option.querySelector('[data-improvement-count]');
             if (value) value.textContent = current;
             if (minus) minus.disabled = current <= 0;
-            if (plus) plus.disabled = unavailable || total >= progression.target || current >= limit;
+            if (plus) {
+              const repeatable = option.dataset.limit === 'repeatable';
+              plus.disabled = unavailable || current >= limit || (!repeatable && total >= progression.target);
+            }
           }
         };
 
@@ -889,6 +907,13 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           event.preventDefault();
           event.stopPropagation();
           const current = Math.max(0, Number(option.dataset.count ?? 0));
+          if (plus && current > 0 && option.dataset.limit === 'repeatable') {
+            const limit = Math.max(1, Number(option.dataset.limitCount ?? 1));
+            option.dataset.count = String(Math.min(limit, current + 1));
+            repeatSubmission = true;
+            void dialog.submit();
+            return;
+          }
           option.dataset.count = String(Math.max(0, current + (plus ? 1 : -1)));
           updateCount();
         });
@@ -961,6 +986,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     await this.save(tamer, records);
     ui.notifications.info(`${actor.name}'s improvements were updated.`);
+    if (repeatSubmission) return this.manageImprovements(tamer, target, actor);
     return true;
   }
 
