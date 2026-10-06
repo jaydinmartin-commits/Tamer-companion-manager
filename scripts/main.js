@@ -1,7 +1,11 @@
+import { TamerCompanionManager } from "./companion-manager.js";
+import { TamerRecords } from "./data/tamer-records.js";
+
 const MODULE_ID = "tamer-companion-manager";
 
 Hooks.once("init", () => {
-  globalThis.TamerCompanionManager = {
-    moduleId: MODULE_ID
+  game.modules.get(MODULE_ID).api = {
+    TamerCompanionManager,
+    TamerRecords
   };
 });
