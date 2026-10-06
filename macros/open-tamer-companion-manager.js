@@ -1,3 +1,5 @@
-const actor = canvas.tokens.controlled[0]?.actor ?? game.user.character;
-if (!actor) return ui.notifications.warn("Select a Tamer token or assign a character first.");
-game.tamerCompanionManager.open(actor);
+const Manager = globalThis.TamerCompanionManager;
+if (!Manager) {
+  return ui.notifications.error("Tamer Companion Manager is not initialized.");
+}
+new Manager().render({ force: true });
