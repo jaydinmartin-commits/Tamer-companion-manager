@@ -756,7 +756,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
       ],
       render: dialog => {
         const root = dialog.element;
-        const boxes = [...root.querySelectorAll('input[name="improvement"]')];
         const count = root.querySelector(".tcm-selected-count");
 
         // Cursor-following tooltip for improvement descriptions.
@@ -771,24 +770,36 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
         const hideTooltip = () => {
           tooltip.style.display = "none";
           tooltip.setAttribute("aria-hidden", "true");
+          pendingPointer = null;
+          if (tooltipFrame) {
+            cancelAnimationFrame(tooltipFrame);
+            tooltipFrame = 0;
+          }
         };
+
+        let tooltipFrame = 0;
+        let pendingPointer = null;
 
         const moveTooltip = event => {
           if (tooltip.style.display === "none") return;
-          const offset = 14;
-          const rect = tooltip.getBoundingClientRect();
-          let left = event.clientX + offset;
-          let top = event.clientY + offset;
+          pendingPointer = { x: event.clientX, y: event.clientY };
+          if (tooltipFrame) return;
+          tooltipFrame = requestAnimationFrame(() => {
+            tooltipFrame = 0;
+            if (tooltip.style.display === "none" || !pendingPointer) return;
 
-          if (left + rect.width > window.innerWidth - 8) {
-            left = event.clientX - rect.width - offset;
-          }
-          if (top + rect.height > window.innerHeight - 8) {
-            top = event.clientY - rect.height - offset;
-          }
+            const { x, y } = pendingPointer;
+            const offset = 14;
+            const rect = tooltip.getBoundingClientRect();
+            let left = x + offset;
+            let top = y + offset;
 
-          tooltip.style.left = `${Math.max(8, left)}px`;
-          tooltip.style.top = `${Math.max(8, top)}px`;
+            if (left + rect.width > window.innerWidth - 8) left = x - rect.width - offset;
+            if (top + rect.height > window.innerHeight - 8) top = y - rect.height - offset;
+
+            tooltip.style.left = `${Math.max(8, left)}px`;
+            tooltip.style.top = `${Math.max(8, top)}px`;
+          });
         };
 
         const showTooltip = (event, option) => {
@@ -797,8 +808,6 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
           tooltip.innerHTML = html;
           tooltip.style.display = "block";
           tooltip.setAttribute("aria-hidden", "false");
-          // Force layout before positioning so width/height are available.
-          tooltip.getBoundingClientRect();
           moveTooltip(event);
         };
 
@@ -1726,6 +1735,9 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
     const tree=await TamerCompanionManager.findBespokeTree(actor);
     const baseHitDieFormula=TamerCompanionManager.getCompanionHitDieFormula(actor);
     const record={id:foundry.utils.randomID(),actorId:actor.id,actorUuid:actor.uuid,name:actor.name,vesselUuid:null,vesselName:"",tokenUuid:null,status:"in-vessel",improvements:[],bespokeTreeId:tree?.id??null,bonusHitDice:0,hitDiceApplied:0,hitDiceChoices:{},hitDiceBaseCount:baseHitDieFormula.count,hitDiceBaseDenomination:baseHitDieFormula.denomination};
+    // Mark the linked Actor so its own native character sheet can display the
+    // companion's consolidated Improvements without scanning every Tamer.
+    await actor.setFlag(MODULE_ID, "companionLink", { tamerUuid: this.tamer.uuid, recordId: record.id });
 
     // Bespoke improvements with "become a tamer's companion" as their
     // prerequisite are granted automatically when the creature is tamed.
@@ -1855,7 +1867,7 @@ class TamerCompanionManager extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async _onDismissCompanion(event, target) { const record = TamerCompanionManager.records(this.tamer)[Number(target.dataset.index)]; if (record && await TamerCompanionManager.dismiss(this.tamer, record)) await this.render({ force: true }); }
   static async _onClearVessel(event, target) { const records = TamerCompanionManager.records(this.tamer), record = records[Number(target.dataset.index)]; if (!record) return; await TamerCompanionManager.clearVessel(this.tamer, record); await this.render({ force: true }); }
-  static async _onUnlinkCompanion(event, target) { const records = TamerCompanionManager.records(this.tamer), record = records[Number(target.dataset.index)]; if (!record) return; const yes = await foundry.applications.api.DialogV2.confirm({ window: { title: "Unlink Companion" }, content: `<p>Unlink <strong>${foundry.utils.escapeHTML(record.name ?? "this companion")}</strong>?</p>`, yes: { label: "Unlink" }, no: { label: "Cancel" } }); if (!yes) return; if (record.tokenUuid) { const token = await fromUuid(record.tokenUuid).catch(() => null); if (token) await token.delete(); } await TamerCompanionManager.clearSplicerAugmentItems(record); records.splice(Number(target.dataset.index), 1); await TamerCompanionManager.save(this.tamer, records); await this.render({ force: true }); }
+  static async _onUnlinkCompanion(event, target) { const records = TamerCompanionManager.records(this.tamer), record = records[Number(target.dataset.index)]; if (!record) return; const yes = await foundry.applications.api.DialogV2.confirm({ window: { title: "Unlink Companion" }, content: `<p>Unlink <strong>${foundry.utils.escapeHTML(record.name ?? "this companion")}</strong>?</p>`, yes: { label: "Unlink" }, no: { label: "Cancel" } }); if (!yes) return; if (record.tokenUuid) { const token = await fromUuid(record.tokenUuid).catch(() => null); if (token) await token.delete(); } const companion = await TamerCompanionManager.resolveCompanionActor(record); if (companion?.getFlag(MODULE_ID, "companionLink")?.tamerUuid === this.tamer.uuid) await companion.unsetFlag(MODULE_ID, "companionLink"); await TamerCompanionManager.clearSplicerAugmentItems(record); records.splice(Number(target.dataset.index), 1); await TamerCompanionManager.save(this.tamer, records); await this.render({ force: true }); }
   static async _onOpenTamer() { await this.tamer.sheet?.render({ force: true }); }
 }
 
